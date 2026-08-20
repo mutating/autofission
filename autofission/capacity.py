@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from typing import Mapping as TypingMapping
 
 from autofission.errors import CapacityError
 from autofission.models import NodeResources, Resources
@@ -14,7 +15,7 @@ from autofission.quantities import (
     parse_pod_count,
 )
 
-JsonObject = Mapping[str, object]
+JsonObject = TypingMapping[str, object]
 
 _TERMINAL_PHASES = frozenset({'Succeeded', 'Failed'})
 _BLOCKING_TAINT_EFFECTS = frozenset({'NoSchedule', 'NoExecute'})

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import Mapping as TypingMapping
 from typing import Protocol
 
 from autofission.capacity import (
@@ -15,7 +16,7 @@ from autofission.capacity import (
 from autofission.errors import CapacityError, ReconcileError
 from autofission.models import ReconcileResult, Resources
 
-JsonObject = Mapping[str, object]
+JsonObject = TypingMapping[str, object]
 
 MANAGED_LABEL = 'autoscaling.fission.io/cluster-capacity'
 MANAGED_VALUE = 'true'
