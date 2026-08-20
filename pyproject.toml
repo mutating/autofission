@@ -7,7 +7,7 @@ build-backend = 'setuptools.build_meta'
 
 [project]
 name = 'autofission'
-dynamic = ['version']
+version = '0.0.1'
 authors = [{ name = 'pomponchik' }]
 description = 'Capacity-aware autoscaling limits for Fission on Kubernetes'
 readme = 'README.md'
@@ -47,9 +47,6 @@ autofission = 'autofission.cli:main'
 Documentation = 'https://github.com/pomponchik/autofission'
 Source = 'https://github.com/pomponchik/autofission'
 Tracker = 'https://github.com/pomponchik/autofission/issues'
-
-[tool.setuptools.dynamic]
-version = { attr = 'autofission.__version__' }
 
 [tool.setuptools.packages.find]
 include = ['autofission*']
