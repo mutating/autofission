@@ -77,6 +77,14 @@ warn_unreachable = true
 module = ['kubernetes.*']
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = ['hypothesis', 'hypothesis.*']
+follow_imports = 'skip'
+
+[[tool.mypy.overrides]]
+module = ['tests.units.test_properties']
+disallow_untyped_decorators = false
+
 [tool.mutmut]
 paths_to_mutate = 'autofission'
 runner = 'pytest -m "not e2e"'
