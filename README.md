@@ -12,7 +12,7 @@
 
 Autofission dynamically calculates and updates the maximum replica limit (`MaxScale`) for explicitly opted-in [Fission](https://fission.io/) Functions. It derives the limit from the Kubernetes cluster's current schedulable capacity.
 
-A Fission Function using the `newdeploy` executor can scale down when demand disappears. Its Horizontal Pod Autoscaler (HPA) still needs a fixed positive `MaxScale`. A limit sized for today's cluster becomes too low when nodes are added. An arbitrarily high limit can flood the scheduler with Pods that cannot fit.
+A Fission Function using the [`newdeploy` executor](https://fission.io/docs/usage/function/executor/) can scale down when demand disappears. Its [Horizontal Pod Autoscaler (HPA)](https://kubernetes.io/docs/concepts/workloads/autoscaling/) still needs a fixed positive `MaxScale`. A limit sized for today's cluster becomes too low when nodes are added. An arbitrarily high limit can flood the scheduler with Pods that cannot fit.
 
 Autofission keeps the limit current by measuring schedulable capacity on each node. It subtracts the requests of existing workloads and accounts for the Function's current replicas. It is designed for elastic, bare-metal, homelab, and edge clusters where nodes come and go and idle compute should remain available to Functions without displacing ordinary services.
 
@@ -66,7 +66,7 @@ This performs a real reconciliation and can update opted-in Functions.
 
 ### Install in a cluster
 
-Prerequisites are Kubernetes and an existing Fission installation. Autofission manages only Functions that use the `newdeploy` executor. The chart installs the controller, its RBAC, and two PriorityClasses; it does not install or remove Fission.
+Prerequisites are Kubernetes and an [existing Fission installation](https://fission.io/docs/installation/). Autofission manages only Functions that use the `newdeploy` executor. The chart installs the controller, its RBAC, and two PriorityClasses; it does not install or remove Fission.
 
 Set `AUTOFISSION_VERSION` to the chart version you want to install, then install Autofission from its OCI release:
 
@@ -89,7 +89,7 @@ helm upgrade --install autofission ./deploy/helm/autofission \
   --set controller.fetcherMemoryRequest=32Mi
 ```
 
-After the chart creates its PriorityClasses, configure Fission to use the low, non-preempting runtime class. This gives ordinary workloads precedence over elastic Function Pods. With the default Autofission release name, add the following to Fission's Helm values and upgrade Fission before opting in any Functions:
+After the chart creates its PriorityClasses, configure Fission to use the [low, non-preempting runtime class](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/). This gives ordinary workloads precedence over elastic Function Pods. With the default Autofission release name, add the following to Fission's Helm values and upgrade Fission before opting in any Functions:
 
 ```yaml
 runtimePodSpec:
@@ -129,7 +129,7 @@ Each cycle is fail-safe and idempotent:
 
 1. List opted-in Functions, along with Fission Environments, Kubernetes Nodes, and Pods.
 2. Keep Ready, uncordoned, non-deleting nodes. Nodes with `NoSchedule` or `NoExecute` taints are excluded by default.
-3. Calculate effective CPU and memory requests for every active, scheduled Pod, including containers, init containers and sidecars, Pod-level requests, and overhead. Exclude completed and unbound Pods.
+3. Calculate effective [CPU and memory requests](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/) for every active, scheduled Pod, including containers, init containers and sidecars, Pod-level requests, and overhead. Exclude completed and unbound Pods.
 4. Resolve each Function's CPU and memory requests, inheriting missing or zero values from its Environment, then add the fetcher request. Use larger values observed on an existing Function Pod.
 5. Add the Function's existing Pods back to its capacity budget because step 3 counted them as other workload. This changes only the calculation, not the Pods. Then calculate how many identical Pods fit on each node. Per-node results are summed, so CPU on one node cannot combine with memory on another.
 6. Set `MaxScale` to at least `MinScale` and 1, then patch only Functions whose value changed. A `resourceVersion` conflict prevents concurrent user edits from being overwritten.
@@ -202,7 +202,7 @@ Uninstalling removes the controller resources but retains the runtime PriorityCl
 - Only Fission `newdeploy` Functions are managed. `poolmgr`, empty executor, and `container` are rejected as opt-in configuration errors.
 - Every managed Function receives the full capacity it could use by itself. This preserves burst capacity, but simultaneous cold bursts can temporarily create Pending Pods. Later cycles account for scheduled peers and reduce the limits; Autofission is not a fairness scheduler.
 - Fission and Kubernetes require a positive HPA maximum, so capacity below one replica produces `MaxScale=1`. An explicit `MinScale` is honored even when it exceeds currently free capacity.
-- The Fission v1 API and Environment resource inheritance are supported and tested with Fission 1.27.0.
+- The [Fission v1 API](https://fission.io/docs/reference/crd-reference/) and Environment resource inheritance are supported and tested with Fission 1.27.0.
 - Capacity includes CPU, memory, and Pod slots. It does not model storage, GPUs and other extended resources, quotas, topology or affinity, per-Function scheduling constraints, image architecture, or unscheduled third-party Pods.
 - Tainted nodes are excluded unless `--include-tainted-nodes` is explicitly set. Only enable it when Fission runtime Pods actually tolerate those taints.
 - Extra sidecars and runtime PodSpec overhead are learned from a running Function Pod. Before the first replica, the estimate consists of the resolved runtime container plus configured fetcher requests.
