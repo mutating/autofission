@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 240" role="img" aria-labelledby="title description">
+  <title id="title">Autofission</title>
+  <desc id="description">A branching cluster mark and the word Autofission</desc>
+  <defs>
+    <linearGradient id="gradient" x1="0" x2="1">
+      <stop offset="0" stop-color="#6d5dfc"/>
+      <stop offset="1" stop-color="#19b7a5"/>
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke="url(#gradient)" stroke-linecap="round" stroke-width="14">
+    <path d="M120 120 58 58M120 120 58 182M120 120 182 58M120 120 182 182"/>
+    <circle cx="120" cy="120" r="29" fill="#111827"/>
+    <circle cx="46" cy="46" r="22" fill="#111827"/>
+    <circle cx="46" cy="194" r="22" fill="#111827"/>
+    <circle cx="194" cy="46" r="22" fill="#111827"/>
+    <circle cx="194" cy="194" r="22" fill="#111827"/>
+  </g>
+  <text x="258" y="148" fill="#111827" font-family="ui-sans-serif,system-ui,sans-serif" font-size="82" font-weight="700">autofission</text>
+</svg>
+
