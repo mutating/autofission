@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "replicaCount": {
+      "type": "integer",
+      "const": 1,
+      "description": "Autofission has no leader election and supports exactly one writer."
+    },
+    "controller": {
+      "type": "object",
+      "properties": {
+        "intervalSeconds": {"type": "number", "exclusiveMinimum": 0},
+        "requestTimeoutSeconds": {"type": "number", "exclusiveMinimum": 0},
+        "retryAttempts": {"type": "integer", "minimum": 0},
+        "fetcherCpuRequest": {"type": "string", "minLength": 1},
+        "fetcherMemoryRequest": {"type": "string", "minLength": 1},
+        "managedLabel": {"type": "string", "minLength": 1},
+        "managedValue": {"type": "string", "minLength": 1},
+        "includeTaintedNodes": {"type": "boolean"},
+        "logLevel": {"enum": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]}
+      },
+      "additionalProperties": false
+    },
+    "priorityClasses": {
+      "type": "object",
+      "properties": {
+        "create": {"type": "boolean"},
+        "controller": {
+          "type": "object",
+          "properties": {
+            "name": {"type": "string"},
+            "value": {"type": "integer"},
+            "preemptionPolicy": {"const": "Never"}
+          },
+          "additionalProperties": false
+        },
+        "runtime": {
+          "type": "object",
+          "properties": {
+            "name": {"type": "string"},
+            "value": {"type": "integer", "maximum": -1},
+            "preemptionPolicy": {"const": "Never"}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

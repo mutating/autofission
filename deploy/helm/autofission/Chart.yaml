@@ -1,0 +1,13 @@
+apiVersion: v2
+name: autofission
+description: Capacity-aware autoscaling limits for Fission functions
+type: application
+# Release packaging overrides both placeholders from pyproject.toml.
+version: 0.0.0-dev
+appVersion: "dev"
+home: https://github.com/pomponchik/autofission
+icon: https://raw.githubusercontent.com/pomponchik/autofission/develop/docs/assets/logo.svg
+sources:
+  - https://github.com/pomponchik/autofission
+maintainers:
+  - name: pomponchik

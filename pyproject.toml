@@ -1,0 +1,142 @@
+[build-system]
+requires = [
+    'setuptools==75.3.2; python_version < "3.9"',
+    'setuptools==80.9.0; python_version >= "3.9"',
+]
+build-backend = 'setuptools.build_meta'
+
+[project]
+name = 'autofission'
+version = '0.0.1'
+authors = [{ name = 'pomponchik' }]
+description = 'Capacity-aware autoscaling limits for Fission on Kubernetes'
+readme = 'README.md'
+requires-python = '>=3.8'
+license = { text = 'MIT' }
+dependencies = [
+    'kubernetes>=27.2.0,<36.0.0; python_version < "3.10"',
+    'kubernetes>=36.0.3,<37.0.0; python_version >= "3.10"',
+    'urllib3>=1.26.0,<3.0.0',
+]
+classifiers = [
+    'Development Status :: 3 - Alpha',
+    'Environment :: Console',
+    'Intended Audience :: Developers',
+    'Intended Audience :: System Administrators',
+    'Operating System :: OS Independent',
+    'Programming Language :: Python',
+    'Programming Language :: Python :: 3.8',
+    'Programming Language :: Python :: 3.9',
+    'Programming Language :: Python :: 3.10',
+    'Programming Language :: Python :: 3.11',
+    'Programming Language :: Python :: 3.12',
+    'Programming Language :: Python :: 3.13',
+    'Programming Language :: Python :: 3.14',
+    'Programming Language :: Python :: 3.15',
+    'Programming Language :: Python :: Free Threading',
+    'Programming Language :: Python :: Free Threading :: 3 - Stable',
+    'Topic :: System :: Clustering',
+    'Typing :: Typed',
+]
+keywords = ['fission', 'kubernetes', 'autoscaling', 'serverless']
+
+[project.scripts]
+autofission = 'autofission.cli:main'
+
+[project.urls]
+Documentation = 'https://github.com/pomponchik/autofission'
+Source = 'https://github.com/pomponchik/autofission'
+Tracker = 'https://github.com/pomponchik/autofission/issues'
+
+[tool.setuptools.packages.find]
+include = ['autofission*']
+
+[tool.setuptools.package-data]
+autofission = ['py.typed']
+
+[tool.coverage.run]
+branch = true
+source = ['autofission']
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
+skip_covered = true
+exclude_also = [
+    'if TYPE_CHECKING:',
+    'if __name__ == .__main__.:',
+    '\.\.\.',
+]
+
+[tool.mypy]
+python_version = '3.8'
+strict = true
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = ['kubernetes.*']
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ['hypothesis', 'hypothesis.*']
+follow_imports = 'skip'
+
+[[tool.mypy.overrides]]
+module = ['tests.units.test_properties']
+disallow_untyped_decorators = false
+
+[tool.mutmut]
+paths_to_mutate = 'autofission'
+runner = 'pytest -m "not e2e"'
+
+[tool.pytest.ini_options]
+addopts = '--strict-config --strict-markers'
+testpaths = ['tests']
+markers = [
+    'e2e: provisions a disposable Kind/Fission cluster and requires AUTOFISSION_E2E=1',
+    'mypy_testing',
+]
+
+[tool.ruff]
+line-length = 100
+target-version = 'py38'
+
+[tool.ruff.format]
+quote-style = 'single'
+
+[tool.ruff.lint]
+select = [
+    'A',
+    'ARG',
+    'B',
+    'BLE',
+    'C4',
+    'E',
+    'ERA',
+    'F',
+    'I',
+    'N',
+    'PERF',
+    'PIE',
+    'PL',
+    'PT',
+    'PTH',
+    'RET',
+    'RSE',
+    'RUF',
+    'SIM',
+    'T20',
+    'TRY',
+    'UP',
+    'W',
+]
+ignore = [
+    'BLE001',
+    'PLR0912',
+    'PLR0913',
+    'PLR2004',
+    'TRY003',
+]
+
+[tool.ruff.lint.per-file-ignores]
+'tests/**' = ['ARG001', 'ARG002', 'ARG005', 'PLR2004', 'RUF001', 'S101']
