@@ -249,4 +249,4 @@ AUTOFISSION_E2E=1 pytest -m e2e -vv
 
 Set `AUTOFISSION_E2E_KEEP_CLUSTER=1` when debugging to preserve the generated cluster. Set `AUTOFISSION_E2E_ARTIFACTS` to choose where failure diagnostics are written. Do not run multiple copies of this suite against the same cluster; every pytest session deliberately creates and owns a separate Kind cluster.
 
-Pushes run lint, unit tests, and the end-to-end suite. A `v*` tag matching `autofission.__version__` publishes the tested package to PyPI, a multi-architecture image to GHCR, and the Helm chart as an OCI artifact.
+Pushes run lint, unit tests, and the end-to-end suite. A push to `main` publishes the current version to PyPI, a multi-architecture image to GHCR, and the Helm chart as an OCI artifact.

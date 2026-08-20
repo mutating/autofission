@@ -2,8 +2,8 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -11,6 +11,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.value }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -21,11 +23,9 @@ jobs:
       - run: |
           python -m pip install -r requirements_dev.txt
           python -m pip install -e .
-      - name: Verify release tag
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          python -c "import os, autofission; assert os.environ['RELEASE_TAG'] == 'v' + autofission.__version__"
+      - name: Read project version
+        id: version
+        run: echo "value=$(python -c 'import autofission; print(autofission.__version__)')" >> "$GITHUB_OUTPUT"
       - name: Quality gate
         run: |
           ruff check autofission tests
@@ -83,8 +83,8 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{version}},value=${{ needs.build.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.build.outputs.version }}
             type=raw,value=latest
       - uses: docker/build-push-action@v6
         with:
@@ -93,7 +93,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: VERSION=${{ steps.meta.outputs.version }}
+          build-args: VERSION=${{ needs.build.outputs.version }}
           provenance: mode=max
           sbom: true
 
@@ -105,18 +105,15 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.14"
       - uses: azure/setup-helm@v4
         with:
           version: v3.17.3
       - name: Package and publish chart
+        env:
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
         run: |
-          version="$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")"
-          test "${GITHUB_REF_NAME}" = "v${version}"
           helm lint deploy/helm/autofission --strict
           mkdir -p dist
-          helm package deploy/helm/autofission --destination dist --version "$version" --app-version "$version"
+          helm package deploy/helm/autofission --destination dist --version "$RELEASE_VERSION" --app-version "$RELEASE_VERSION"
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
           helm push dist/autofission-*.tgz oci://ghcr.io/${{ github.repository_owner }}/charts
