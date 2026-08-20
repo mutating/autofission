@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class Resources:
     """CPU and memory in Kubernetes scheduler units."""
 
@@ -40,7 +40,7 @@ class Resources:
         )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class NodeResources:
     """Allocatable resources of one eligible node."""
 
@@ -49,7 +49,7 @@ class NodeResources:
     pod_slots: int
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class ReconcileResult:
     """Observable outcome of one complete reconciliation pass."""
 

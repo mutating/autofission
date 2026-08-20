@@ -8,7 +8,7 @@ from math import isfinite
 from pathlib import Path
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class HealthFiles:
     """Manage process-local readiness and liveness timestamps."""
 

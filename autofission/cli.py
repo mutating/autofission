@@ -125,10 +125,19 @@ def build_parser() -> argparse.ArgumentParser:
         '--managed-value',
         default=_env('MANAGED_VALUE', MANAGED_VALUE),
     )
-    parser.add_argument(
+    tainted_nodes = parser.add_mutually_exclusive_group()
+    tainted_nodes.add_argument(
         '--include-tainted-nodes',
-        action=argparse.BooleanOptionalAction,
-        default=_env_bool('INCLUDE_TAINTED_NODES'),
+        dest='include_tainted_nodes',
+        action='store_true',
+    )
+    tainted_nodes.add_argument(
+        '--no-include-tainted-nodes',
+        dest='include_tainted_nodes',
+        action='store_false',
+    )
+    parser.set_defaults(
+        include_tainted_nodes=_env_bool('INCLUDE_TAINTED_NODES'),
     )
     parser.add_argument('--kubeconfig', type=Path)
     parser.add_argument('--context')

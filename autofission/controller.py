@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Protocol, TypeAlias
+from typing import Protocol
 
 from autofission.capacity import (
     ClusterSnapshot,
@@ -15,7 +15,7 @@ from autofission.capacity import (
 from autofission.errors import CapacityError, ReconcileError
 from autofission.models import ReconcileResult, Resources
 
-JsonObject: TypeAlias = Mapping[str, object]
+JsonObject = Mapping[str, object]
 
 MANAGED_LABEL = 'autoscaling.fission.io/cluster-capacity'
 MANAGED_VALUE = 'true'
@@ -42,7 +42,7 @@ class KubernetesGateway(Protocol):
     ) -> object: ...
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class ControllerConfig:
     """Inputs that affect capacity and opt-in selection."""
 
@@ -62,7 +62,7 @@ class ControllerConfig:
             raise ValueError('managed label and value cannot be empty')
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class _FunctionIdentity:
     namespace: str
     name: str

@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import TypeAlias
 
 from autofission.errors import CapacityError
 from autofission.models import NodeResources, Resources
@@ -15,7 +14,7 @@ from autofission.quantities import (
     parse_pod_count,
 )
 
-JsonObject: TypeAlias = Mapping[str, object]
+JsonObject = Mapping[str, object]
 
 _TERMINAL_PHASES = frozenset({'Succeeded', 'Failed'})
 _BLOCKING_TAINT_EFFECTS = frozenset({'NoSchedule', 'NoExecute'})
@@ -204,7 +203,7 @@ def _node_resources(node: object, *, include_tainted: bool) -> NodeResources | N
     )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class _PodAllocation:
     node_name: str
     resources: Resources
