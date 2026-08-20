@@ -21,15 +21,15 @@ Autofission is a controller for the upper bound, not a second request autoscaler
 
 ## Table of Contents
 
-- [Installation](#installation)
-- [Quick start](#quick-start)
-- [How it works](#how-it-works)
-- [Configuration](#configuration)
-- [RBAC and security](#rbac-and-security)
-- [Operations](#operations)
-- [Compatibility and limitations](#compatibility-and-limitations)
-- [Troubleshooting](#troubleshooting)
-- [Development and releases](#development-and-releases)
+- [**Installation**](#installation)
+- [**Quick start**](#quick-start)
+- [**How it works**](#how-it-works)
+- [**Configuration**](#configuration)
+- [**RBAC and security**](#rbac-and-security)
+- [**Operations**](#operations)
+- [**Compatibility and limitations**](#compatibility-and-limitations)
+- [**Troubleshooting**](#troubleshooting)
+- [**Development and releases**](#development-and-releases)
 
 
 ## Installation
