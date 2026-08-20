@@ -63,7 +63,7 @@ Then install Autofission from an OCI release:
 ```bash
 helm upgrade --install autofission \
   oci://ghcr.io/pomponchik/charts/autofission \
-  --version 0.1.0 \
+  --version "${AUTOFISSION_VERSION}" \
   --namespace fission \
   --create-namespace \
   --atomic \

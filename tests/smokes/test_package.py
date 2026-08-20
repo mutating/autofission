@@ -51,10 +51,15 @@ def test_module_entry_point_reports_version_outside_repository(tmp_path: Path) -
     assert result.stderr == ''
 
 
-def test_chart_and_package_versions_match() -> None:
+def test_release_versions_have_no_second_source_of_truth() -> None:
     chart = yaml.safe_load((CHART / 'Chart.yaml').read_text(encoding='utf-8'))
-    assert chart['version'] == autofission.__version__
-    assert chart['appVersion'] == autofission.__version__
+    dockerfile = (ROOT / 'Dockerfile').read_text(encoding='utf-8')
+    release = (ROOT / '.github' / 'workflows' / 'release.yml').read_text(encoding='utf-8')
+    assert chart['version'] == '0.0.0-dev'
+    assert chart['appVersion'] == 'dev'
+    assert 'ARG VERSION=dev' in dockerfile
+    assert 'helm package' in release
+    assert '--version "$version" --app-version "$version"' in release
 
 
 def test_chart_rbac_is_exactly_the_required_read_and_patch_surface() -> None:
