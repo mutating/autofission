@@ -109,11 +109,10 @@ jobs:
         with:
           version: v3.17.3
       - name: Package and publish chart
-        env:
-          RELEASE_VERSION: ${{ needs.build.outputs.version }}
         run: |
+          version="${{ needs.build.outputs.version }}"
           helm lint deploy/helm/autofission --strict
           mkdir -p dist
-          helm package deploy/helm/autofission --destination dist --version "$RELEASE_VERSION" --app-version "$RELEASE_VERSION"
+          helm package deploy/helm/autofission --destination dist --version "$version" --app-version "$version"
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
           helm push dist/autofission-*.tgz oci://ghcr.io/${{ github.repository_owner }}/charts
