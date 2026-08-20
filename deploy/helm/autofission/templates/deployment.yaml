@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "autofission.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "autofission.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "autofission.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "autofission.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "autofission.serviceAccountName" . }}
+      automountServiceAccountToken: true
+      priorityClassName: {{ include "autofission.controllerPriorityClassName" . }}
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: autofission
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --in-cluster
+            - --interval-seconds={{ .Values.controller.intervalSeconds }}
+            - --request-timeout-seconds={{ .Values.controller.requestTimeoutSeconds }}
+            - --retry-attempts={{ .Values.controller.retryAttempts }}
+            - --fetcher-cpu-request={{ .Values.controller.fetcherCpuRequest }}
+            - --fetcher-memory-request={{ .Values.controller.fetcherMemoryRequest }}
+            - --managed-label={{ .Values.controller.managedLabel }}
+            - --managed-value={{ .Values.controller.managedValue }}
+            - --log-level={{ .Values.controller.logLevel }}
+            - --state-directory=/var/run/autofission
+            {{- if .Values.controller.includeTaintedNodes }}
+            - --include-tainted-nodes
+            {{- end }}
+          readinessProbe:
+            exec:
+              command:
+                - autofission
+                - --probe=readiness
+                - --state-directory=/var/run/autofission
+                - --max-age-seconds={{ .Values.readinessProbe.maxAgeSeconds }}
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          livenessProbe:
+            exec:
+              command:
+                - autofission
+                - --probe=liveness
+                - --state-directory=/var/run/autofission
+                - --max-age-seconds={{ .Values.livenessProbe.maxAgeSeconds }}
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: state
+              mountPath: /var/run/autofission
+      volumes:
+        - name: state
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+

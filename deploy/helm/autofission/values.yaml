@@ -1,0 +1,87 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/pomponchik/autofission
+  pullPolicy: IfNotPresent
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+rbac:
+  create: true
+
+controller:
+  intervalSeconds: 15
+  requestTimeoutSeconds: 10
+  retryAttempts: 3
+  fetcherCpuRequest: 10m
+  fetcherMemoryRequest: 16Mi
+  managedLabel: autoscaling.fission.io/cluster-capacity
+  managedValue: "true"
+  includeTaintedNodes: false
+  logLevel: INFO
+
+priorityClasses:
+  create: true
+  controller:
+    name: ""
+    value: 1000000
+    preemptionPolicy: Never
+  runtime:
+    name: ""
+    value: -10
+    preemptionPolicy: Never
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+readinessProbe:
+  maxAgeSeconds: 60
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+livenessProbe:
+  maxAgeSeconds: 180
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+networkPolicy:
+  create: true

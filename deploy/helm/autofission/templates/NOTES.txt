@@ -1,0 +1,11 @@
+Autofission is installed in {{ .Release.Namespace }}.
+
+Opt a newdeploy Function in:
+  kubectl label function -n <namespace> <name> \
+    {{ .Values.controller.managedLabel }}={{ .Values.controller.managedValue }}
+
+Protect existing workloads by configuring Fission runtime Pods to use:
+  {{ include "autofission.runtimePriorityClassName" . }}
+
+See README.md#install-in-a-cluster for the required Fission Helm values.
+
