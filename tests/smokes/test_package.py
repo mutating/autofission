@@ -28,12 +28,15 @@ def test_installed_metadata_and_console_entry_point_match_package() -> None:
 def test_installed_metadata_declares_the_full_supported_python_range() -> None:
     metadata = importlib.metadata.metadata('autofission')
     classifiers = set(metadata.get_all('Classifier') or [])
+    requirements = set(metadata.get_all('Requires-Dist') or [])
     assert metadata['Requires-Python'] == '>=3.8'
     assert {
         *(f'Programming Language :: Python :: 3.{minor}' for minor in range(8, 16)),
         'Programming Language :: Python :: Free Threading',
         'Programming Language :: Python :: Free Threading :: 3 - Stable',
     } <= classifiers
+    assert 'kubernetes<36.0.0,>=27.2.0; python_version < "3.10"' in requirements
+    assert 'kubernetes<37.0.0,>=36.0.3; python_version >= "3.10"' in requirements
 
 
 def test_module_entry_point_reports_version_outside_repository(tmp_path: Path) -> None:
