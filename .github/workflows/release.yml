@@ -33,7 +33,7 @@ jobs:
           ruff format --check autofission tests
           mypy --strict autofission
           mypy tests
-          coverage run --branch -m pytest
+          coverage run --branch -m pytest -m "not e2e"
           coverage report --fail-under=100
       - name: Build distributions
         run: |

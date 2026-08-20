@@ -222,11 +222,19 @@ ruff check autofission tests
 ruff format --check autofission tests
 mypy --strict autofission
 mypy tests
-coverage run -m pytest
+coverage run -m pytest -m "not e2e"
 coverage report --fail-under=100
 python -m build
 twine check --strict dist/*
 helm lint deploy/helm/autofission
 ```
 
-Pushes run lint and the operating-system/Python test matrix. A `v*` tag whose version exactly matches `autofission.__version__` publishes the already tested wheel and sdist to PyPI, a multi-architecture image to GHCR, and the Helm chart as an OCI artifact. Trusted publishing is used for PyPI; no long-lived PyPI token belongs in repository secrets.
+The end-to-end suite creates a disposable Kind cluster with one cordoned control-plane and three schedulable workers, installs Fission, Metrics Server, and the chart from the current checkout, and runs through real scale-out, scale-in, capacity-contraction, and non-preemption scenarios. Docker, Kind, kubectl, Helm, and the Fission CLI are required locally:
+
+```bash
+AUTOFISSION_E2E=1 pytest -m e2e -vv
+```
+
+Set `AUTOFISSION_E2E_KEEP_CLUSTER=1` when debugging to preserve the generated cluster. Set `AUTOFISSION_E2E_ARTIFACTS` to choose where failure diagnostics are written. Do not run multiple copies of this suite against the same cluster; every pytest session deliberately creates and owns a separate Kind cluster.
+
+Pushes run lint and the operating-system/Python unit-test matrix. Only after that matrix succeeds, a dedicated Linux job runs the pytest e2e suite against the three-worker Kind cluster. A `v*` tag whose version exactly matches `autofission.__version__` publishes the already tested wheel and sdist to PyPI, a multi-architecture image to GHCR, and the Helm chart as an OCI artifact. Trusted publishing is used for PyPI; no long-lived PyPI token belongs in repository secrets.

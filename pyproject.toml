@@ -79,12 +79,15 @@ ignore_missing_imports = true
 
 [tool.mutmut]
 paths_to_mutate = 'autofission'
-runner = 'pytest'
+runner = 'pytest -m "not e2e"'
 
 [tool.pytest.ini_options]
 addopts = '--strict-config --strict-markers'
 testpaths = ['tests']
-markers = ['mypy_testing']
+markers = [
+    'e2e: provisions a disposable Kind/Fission cluster and requires AUTOFISSION_E2E=1',
+    'mypy_testing',
+]
 
 [tool.ruff]
 line-length = 100

@@ -34,7 +34,7 @@ jobs:
 
       - name: Run tests with 100% line and branch coverage
         run: |
-          coverage run --branch -m pytest --cache-clear --assert=plain
+          coverage run --branch -m pytest -m "not e2e" --cache-clear --assert=plain
           coverage report --fail-under=100
           coverage xml
 
@@ -97,7 +97,64 @@ jobs:
       - run: |
           python -m pip install -r requirements_dev.txt
           python -m pip install -e . "${{ matrix.spec }}"
-          pytest
+          pytest -m "not e2e"
+
+  e2e:
+    name: End-to-end (Kind, 3 workers)
+    needs: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: requirements_dev.txt
+
+      - name: Install Python dependencies and package
+        run: |
+          python -m pip install -r requirements_dev.txt
+          python -m pip install -e .
+
+      - name: Install Kind and kubectl
+        uses: helm/kind-action@v1.14.0
+        with:
+          install_only: true
+          version: v0.31.0
+          kubectl_version: v1.34.0
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.17.3
+
+      - name: Install Fission CLI
+        shell: bash
+        run: |
+          curl --fail --location --silent --show-error \
+            --output fission \
+            https://github.com/fission/fission/releases/download/v1.27.0/fission-v1.27.0-linux-amd64
+          echo "69eb82c53945ae8bdd5842933a88459b7004fe8eb2f0ab1c3de0a814e04ca9e9  fission" \
+            | sha256sum --check
+          chmod +x fission
+          sudo install fission /usr/local/bin/fission
+
+      - name: Run real-cluster tests
+        env:
+          AUTOFISSION_E2E: "1"
+          AUTOFISSION_E2E_ARTIFACTS: ${{ runner.temp }}/autofission-e2e-artifacts
+        run: pytest -m e2e -vv --showlocals
+
+      - name: Upload cluster diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-cluster-diagnostics
+          path: ${{ runner.temp }}/autofission-e2e-artifacts
+          if-no-files-found: ignore
+          retention-days: 7
 
   helm:
     runs-on: ubuntu-latest
