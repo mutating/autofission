@@ -2,8 +2,8 @@ apiVersion: v2
 name: autofission
 description: Capacity-aware autoscaling limits for Fission functions
 type: application
-version: 0.1.0
-appVersion: "0.1.0"
+version: 0.0.1
+appVersion: "0.0.1"
 home: https://github.com/pomponchik/autofission
 icon: https://raw.githubusercontent.com/pomponchik/autofission/develop/docs/assets/logo.svg
 sources:
