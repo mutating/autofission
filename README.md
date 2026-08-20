@@ -12,9 +12,11 @@
 
 ![Autofission](https://raw.githubusercontent.com/pomponchik/autofission/develop/docs/assets/logo.svg)
 
+Autofission dynamically calculates and updates `MaxScale` for explicitly opted-in [Fission](https://fission.io/) Functions based on the Kubernetes cluster's current schedulable capacity.
+
 Fission can scale a `newdeploy` function down after demand disappears, but its HPA still needs a fixed positive `MaxScale`. A number chosen for today's cluster becomes an artificial ceiling after nodes are added, while an arbitrarily huge number can flood the scheduler with Pods that cannot fit.
 
-Autofission keeps that ceiling useful. It continuously measures schedulable capacity node by node, subtracts the requests of existing workloads, accounts for the function's own replicas, and writes a safe capacity-derived `MaxScale` back to explicitly opted-in Fission Functions. It is intended for elastic, bare-metal, homelab, and edge clusters where nodes come and go and idle compute should be available to functions without displacing ordinary services.
+To keep that ceiling useful, Autofission continuously measures schedulable capacity node by node, subtracts the requests of existing workloads, and accounts for the function's own replicas. It is intended for elastic, bare-metal, homelab, and edge clusters where nodes come and go and idle compute should be available to functions without displacing ordinary services.
 
 Autofission is a controller for the upper bound, not a second request autoscaler. Fission's HPA and idle reaper still decide when replicas grow and shrink.
 
