@@ -1,10 +1,17 @@
 <details>
   <summary>ⓘ</summary>
 
-[![Tests](https://github.com/pomponchik/autofission/actions/workflows/tests_and_coverage.yml/badge.svg?branch=develop)](https://github.com/pomponchik/autofission/actions/workflows/tests_and_coverage.yml)
-[![Lint](https://github.com/pomponchik/autofission/actions/workflows/lint.yml/badge.svg?branch=develop)](https://github.com/pomponchik/autofission/actions/workflows/lint.yml)
+[![Downloads](https://static.pepy.tech/badge/autofission/month)](https://pepy.tech/project/autofission)
+[![Downloads](https://static.pepy.tech/badge/autofission)](https://pepy.tech/project/autofission)
+[![Coverage Status](https://coveralls.io/repos/github/pomponchik/autofission/badge.svg?branch=develop)](https://coveralls.io/github/pomponchik/autofission?branch=develop)
+[![Lines of code](https://sloc.xyz/github/pomponchik/autofission/?category=code)](https://github.com/boyter/scc/)
+[![Hits-of-Code](https://hitsofcode.com/github/pomponchik/autofission?branch=develop)](https://hitsofcode.com/github/pomponchik/autofission/view?branch=develop)
+[![Test-Package](https://github.com/pomponchik/autofission/actions/workflows/tests_and_coverage.yml/badge.svg?branch=develop)](https://github.com/pomponchik/autofission/actions/workflows/tests_and_coverage.yml)
 [![Python versions](https://img.shields.io/pypi/pyversions/autofission.svg)](https://pypi.org/project/autofission/)
 [![PyPI version](https://badge.fury.io/py/autofission.svg)](https://pypi.org/project/autofission/)
+[![Checked with mypy](http://www.mypy-lang.org/static/mypy_badge.svg)](http://mypy-lang.org/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/pomponchik/autofission)
 
 </details>
 
