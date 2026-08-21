@@ -26,16 +26,6 @@ Autofission keeps the limit current by estimating available capacity on each nod
 
 The only scaling setting Autofission changes is this upper bound; it also records the calculation in annotations. Fission's HPA and idle reaper still decide when the replica count grows and shrinks.
 
-```mermaid
-flowchart TD
-    state["Cluster state<br/>Nodes, Pods, and resource requests"] --> autofission["Autofission<br/>estimates modeled capacity"]
-    autofission -->|updates| limit["Function MaxScale"]
-    demand["Demand or idle time"] --> scaling["Fission HPA<br/>and idle reaper"]
-    limit -->|sets upper bound| scaling
-    scaling -->|changes| replicas["Function replicas"]
-```
-
-
 ## Table of Contents
 
 - [**Installation**](#installation)
@@ -134,6 +124,15 @@ Removing the label stops future management. Autofission deliberately does not gu
 
 
 ## How it works
+
+```mermaid
+flowchart TD
+    state["Cluster state<br/>Nodes, Pods, and resource requests"] --> autofission["Autofission<br/>estimates modeled capacity"]
+    autofission -->|updates| limit["Function MaxScale"]
+    demand["Demand or idle time"] --> scaling["Fission HPA<br/>and idle reaper"]
+    limit -->|sets upper bound| scaling
+    scaling -->|changes| replicas["Function replicas"]
+```
 
 Each cycle validates its inputs and is idempotent for an unchanged cluster snapshot:
 
