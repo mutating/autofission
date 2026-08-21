@@ -17,6 +17,7 @@
 
 ![Autofission](https://raw.githubusercontent.com/pomponchik/autofission/develop/docs/assets/logo.svg)
 
+
 Autofission dynamically calculates and updates the maximum replica limit (`MaxScale`) for explicitly opted-in [Fission](https://fission.io/) Functions. It estimates the limit from currently available CPU, memory, and Pod slots on schedulable Kubernetes nodes.
 
 A Fission Function using the [`newdeploy` executor](https://fission.io/docs/usage/function/executor/) can scale down when demand disappears. Its [Horizontal Pod Autoscaler (HPA)](https://kubernetes.io/docs/concepts/workloads/autoscaling/) still needs a fixed positive `MaxScale`. A limit sized for today's cluster becomes too low when nodes are added. An arbitrarily high limit can flood the scheduler with Pods that cannot fit.
@@ -105,6 +106,7 @@ runtimePodSpec:
   podSpec:
     priorityClassName: autofission-runtime
 ```
+
 
 ## Quick start
 
