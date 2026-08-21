@@ -38,7 +38,6 @@ flowchart TD
 - [**Operations**](#operations)
 - [**Compatibility and limitations**](#compatibility-and-limitations)
 - [**Troubleshooting**](#troubleshooting)
-- [**Development and releases**](#development-and-releases)
 
 
 ## Installation
@@ -222,33 +221,3 @@ Uninstalling removes the controller resources but retains the runtime PriorityCl
 `Function Pods remain Pending` — verify the runtime PriorityClass, taints/tolerations, node selectors, architecture, quota, storage, and concurrent managed Functions. Those constraints can be stricter than Autofission's current capacity model.
 
 `The HPA has not changed yet` — Autofission patches the Function CR. Fission's executor reconciles that change into the HPA asynchronously; controller readiness confirms only that Autofission completed a full reconciliation successfully within the configured probe age.
-
-
-## Development and releases
-
-Set up a development environment and run the local checks:
-
-```bash
-python -m venv .venv
-. .venv/bin/activate
-python -m pip install -r requirements_dev.txt -e .
-ruff check autofission tests
-ruff format --check autofission tests
-mypy --strict autofission
-mypy tests
-coverage run -m pytest -m "not e2e"
-coverage report --fail-under=100
-python -m build
-twine check --strict dist/*
-helm lint deploy/helm/autofission
-```
-
-The end-to-end suite creates a disposable Kind cluster, installs Fission, Metrics Server, and the chart, then tests scale-out, scale-in, capacity contraction, and non-preemption. Docker, Kind, kubectl, Helm, and the Fission CLI are required:
-
-```bash
-AUTOFISSION_E2E=1 pytest -m e2e -vv
-```
-
-Set `AUTOFISSION_E2E_KEEP_CLUSTER=1` when debugging to preserve the generated cluster. Set `AUTOFISSION_E2E_ARTIFACTS` to choose where failure diagnostics are written. Do not run multiple copies of this suite against the same cluster; every `pytest` session deliberately creates and owns a separate Kind cluster.
-
-Pushes run lint, unit tests, and the end-to-end suite. A push to `main` publishes the current version to PyPI, a multi-architecture image to GHCR, and the Helm chart as an OCI artifact.
