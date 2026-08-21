@@ -14,8 +14,7 @@ from autofission.controller import (
 )
 from autofission.errors import ReconcileError
 from autofission.models import Resources
-
-from ..helpers import environment, function, node, pod
+from tests.helpers import environment, function, node, pod
 
 
 class FakeGateway:
@@ -313,7 +312,7 @@ def test_calculated_maximum_is_clamped_to_hpa_int32(
 ) -> None:
     monkeypatch.setattr(
         'autofission.capacity.ClusterSnapshot.function_capacity',
-        lambda self, uid, request: INT32_MAX + 1,
+        lambda _self, _uid, _request: INT32_MAX + 1,
     )
     gateway = FakeGateway()
 

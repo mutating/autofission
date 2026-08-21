@@ -12,8 +12,7 @@ from autofission.capacity import (
 )
 from autofission.errors import CapacityError
 from autofission.models import Resources
-
-from ..helpers import container, environment, function, node, pod
+from tests.helpers import container, environment, function, node, pod
 
 
 def test_pod_requests_sum_regular_containers_and_round_each_one() -> None:
@@ -156,7 +155,7 @@ def test_snapshot_rejects_duplicate_or_contradictory_nodes() -> None:
 @pytest.mark.parametrize(
     ('mutation', 'message'),
     [
-        (lambda item: None, 'node must be an object'),
+        (lambda _item: None, 'node must be an object'),
         (lambda item: item.update(metadata=None), 'node.metadata must be an object'),
         (
             lambda item: item['metadata'].update(name=''),
@@ -290,7 +289,7 @@ def test_snapshot_rejects_invalid_function_inputs(
 @pytest.mark.parametrize(
     ('mutation', 'message'),
     [
-        (lambda item: None, 'pod must be an object'),
+        (lambda _item: None, 'pod must be an object'),
         (lambda item: item.update(spec=None), 'pod.spec must be an object'),
         (
             lambda item: item['status'].update(phase=1),
@@ -426,7 +425,7 @@ def test_explicit_zero_environment_request_is_not_defaulted_from_limit() -> None
 @pytest.mark.parametrize(
     ('mutate', 'message'),
     [
-        (lambda item: None, 'function must be an object'),
+        (lambda _item: None, 'function must be an object'),
         (lambda item: item.update(metadata=None), 'function.metadata must be an object'),
         (
             lambda item: item['metadata'].update(namespace=''),
