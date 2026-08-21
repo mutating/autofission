@@ -242,7 +242,7 @@ def _pod_allocation(pod: object) -> _PodAllocation | None:
 class ClusterSnapshot:
     """Immutable per-node usage snapshot used for several function plans."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         nodes: Mapping[str, NodeResources],
         used: Mapping[str, Resources],
