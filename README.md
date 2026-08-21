@@ -54,7 +54,7 @@ python -m pip install autofission
 autofission --help
 ```
 
-Outside a Pod, the CLI uses the current kubeconfig context. Inside Kubernetes it uses the mounted ServiceAccount credentials.
+Outside a Pod, the CLI uses the current `kubeconfig` context. Inside Kubernetes it uses the mounted ServiceAccount credentials.
 
 To run one reconciliation without starting a daemon:
 
@@ -128,13 +128,13 @@ Removing the label stops future management. Autofission deliberately does not gu
 Each cycle is fail-safe and idempotent:
 
 1. List opted-in Functions, along with Fission Environments, Kubernetes Nodes, and Pods.
-2. Keep Ready, uncordoned, non-deleting nodes. Nodes with `NoSchedule` or `NoExecute` taints are excluded by default.
+2. Keep `Ready`, uncordoned, non-deleting nodes. Nodes with `NoSchedule` or `NoExecute` taints are excluded by default.
 3. Calculate effective [CPU and memory requests](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/) for every active, scheduled Pod, including containers, init containers and sidecars, Pod-level requests, and overhead. Exclude completed and unbound Pods.
 4. Resolve each Function's CPU and memory requests, inheriting missing or zero values from its Environment, then add the fetcher request. Use larger values observed on an existing Function Pod.
 5. Add the Function's existing Pods back to its capacity budget because step 3 counted them as other workload. This changes only the calculation, not the Pods. Then calculate how many identical Pods fit on each node. Per-node results are summed, so CPU on one node cannot combine with memory on another.
-6. Set `MaxScale` to at least `MinScale` and 1, then patch only Functions whose value changed. A `resourceVersion` conflict prevents concurrent user edits from being overwritten.
+6. Set `MaxScale` to at least `MinScale` and `1`, then patch only Functions whose value changed. A `resourceVersion` conflict prevents concurrent user edits from being overwritten.
 
-An invalid or conflicting Function does not block the others, but the controller remains NotReady until every managed Function completes cleanly.
+An invalid or conflicting Function does not block the others, but the controller remains `NotReady` until every managed Function completes cleanly.
 
 
 ## Configuration
@@ -167,7 +167,7 @@ The chart grants only these cluster-wide operations:
 
 It cannot read Secrets, create or delete Functions, or mutate Pods, Nodes, Deployments, or Services. Kubernetes RBAC cannot restrict `list` or `patch` permissions by label, so the opt-in label is an application-level boundary. Listing Pods exposes their specifications, including literal environment-variable values, to the controller process. This access is needed to protect capacity requested by other workloads.
 
-The container runs as UID/GID 65532 with a read-only root filesystem. It drops all Linux capabilities, blocks privilege escalation, and uses a RuntimeDefault seccomp profile. The chart denies ingress but leaves egress unrestricted because a portable policy cannot select every cluster's API endpoint without hard-coded addresses.
+The container runs as UID/GID `65532` with a read-only root filesystem. It drops all Linux capabilities, blocks privilege escalation, and uses a `RuntimeDefault` seccomp profile. The chart denies ingress but leaves egress unrestricted because a portable policy cannot select every cluster's API endpoint without hard-coded addresses.
 
 The controller has a high PriorityClass so it remains available while Function Pods fill the cluster. The `autofission-runtime` class is negative and uses `preemptionPolicy: Never`; configure Fission to use it as shown under installation. Accurate resource requests remain essential because Autofission budgets requests like the scheduler rather than measuring live CPU or memory usage.
 
@@ -200,12 +200,12 @@ Uninstalling removes the controller resources but retains the runtime PriorityCl
 ## Compatibility and limitations
 
 - Only Fission `newdeploy` Functions are managed. `poolmgr`, empty executor, and `container` are rejected as opt-in configuration errors.
-- Every managed Function receives the full capacity it could use by itself. This preserves burst capacity, but simultaneous cold bursts can temporarily create Pending Pods. Later cycles account for scheduled peers and reduce the limits; Autofission is not a fairness scheduler.
+- Every managed Function receives the full capacity it could use by itself. This preserves burst capacity, but simultaneous cold bursts can temporarily create `Pending` Pods. Later cycles account for scheduled peers and reduce the limits; Autofission is not a fairness scheduler.
 - Fission and Kubernetes require a positive HPA maximum, so capacity below one replica produces `MaxScale=1`. An explicit `MinScale` is honored even when it exceeds currently free capacity.
-- The [Fission v1 API](https://fission.io/docs/reference/crd-reference/) and Environment resource inheritance are supported and tested with Fission 1.27.0.
+- The [Fission v1 API](https://fission.io/docs/reference/crd-reference/) and Environment resource inheritance are supported and tested with Fission `1.27.0`.
 - Capacity includes CPU, memory, and Pod slots. It does not model storage, GPUs and other extended resources, quotas, topology or affinity, per-Function scheduling constraints, image architecture, or unscheduled third-party Pods.
 - Tainted nodes are excluded unless `--include-tainted-nodes` is explicitly set. Only enable it when Fission runtime Pods actually tolerate those taints.
-- Extra sidecars and runtime PodSpec overhead are learned from a running Function Pod. Before the first replica, the estimate consists of the resolved runtime container plus configured fetcher requests.
+- Extra sidecars and runtime `PodSpec` overhead are learned from a running Function Pod. Before the first replica, the estimate consists of the resolved runtime container plus configured fetcher requests.
 - Low, non-preempting priority prevents Function Pods from evicting existing workloads. It cannot prevent node-pressure eviction when requests are inaccurate or nodes run at their physical limit; reserve headroom and set accurate requests.
 - Very large clusters should benchmark API-server load and controller memory before shortening the default interval.
 - Cluster-scoped RBAC and PriorityClass names use the release name, so reusing a name in another namespace causes collisions. Install Autofission once per cluster unless you set unique `fullnameOverride` and `priorityClasses.*.name` values.
@@ -215,7 +215,7 @@ Uninstalling removes the controller resources but retains the runtime PriorityCl
 
 `Autofission is NotReady` — inspect controller logs. A `403` indicates custom RBAC or a ServiceAccount mismatch. A `409` means the Function changed after it was listed and will be retried safely on the next cycle. Other errors name the Function where possible.
 
-`The calculated limit is smaller than expected` — check cordons, Ready status, taints, Pod requests, Pod slots, fetcher values, and per-node fragmentation. Capacity cannot combine spare CPU and spare memory located on different nodes.
+`The calculated limit is smaller than expected` — check cordons, `Ready` status, taints, Pod requests, Pod slots, fetcher values, and per-node fragmentation. Capacity cannot combine spare CPU and spare memory located on different nodes.
 
 `Function Pods remain Pending` — verify the runtime PriorityClass, taints/tolerations, node selectors, architecture, quota, storage, and concurrent managed Functions. Those constraints can be stricter than Autofission's current capacity model.
 
@@ -247,6 +247,6 @@ The end-to-end suite creates a disposable Kind cluster, installs Fission, Metric
 AUTOFISSION_E2E=1 pytest -m e2e -vv
 ```
 
-Set `AUTOFISSION_E2E_KEEP_CLUSTER=1` when debugging to preserve the generated cluster. Set `AUTOFISSION_E2E_ARTIFACTS` to choose where failure diagnostics are written. Do not run multiple copies of this suite against the same cluster; every pytest session deliberately creates and owns a separate Kind cluster.
+Set `AUTOFISSION_E2E_KEEP_CLUSTER=1` when debugging to preserve the generated cluster. Set `AUTOFISSION_E2E_ARTIFACTS` to choose where failure diagnostics are written. Do not run multiple copies of this suite against the same cluster; every `pytest` session deliberately creates and owns a separate Kind cluster.
 
 Pushes run lint, unit tests, and the end-to-end suite. A push to `main` publishes the current version to PyPI, a multi-architecture image to GHCR, and the Helm chart as an OCI artifact.
