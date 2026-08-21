@@ -82,6 +82,18 @@ def test_mypy_uses_the_matrix_interpreter_version() -> None:
     assert 'mypy --strict autofission' in lint_workflow
 
 
+def test_workflows_propagate_shell_and_step_failures() -> None:
+    workflows = ROOT / '.github' / 'workflows'
+    paths = [*workflows.glob('*.yml'), *workflows.glob('*.yaml')]
+    assert paths
+    for path in paths:
+        workflow = yaml.safe_load(path.read_text(encoding='utf-8'))
+        assert workflow['defaults']['run']['shell'] == 'bash', path
+        for job in workflow['jobs'].values():
+            for step in job['steps']:
+                assert step.get('continue-on-error') is not True, (path, step)
+
+
 def test_chart_rbac_is_exactly_the_required_read_and_patch_surface() -> None:
     template = (CHART / 'templates' / 'rbac.yaml').read_text(encoding='utf-8')
     assert 'resources: ["nodes", "pods"]' in template
