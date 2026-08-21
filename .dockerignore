@@ -2,7 +2,8 @@
 .github
 .venv
 build
-dist
+dist/*
+!dist/*.whl
 docs
 tests
 *.egg-info
@@ -11,4 +12,3 @@ __pycache__
 .mypy_cache
 .pytest_cache
 .ruff_cache
-
