@@ -64,7 +64,7 @@ def test_paginate_preserves_order_kwargs_and_opaque_tokens() -> None:
 def test_paginate_detects_repeated_or_cyclic_tokens(tokens: list[str]) -> None:
     pages = [{'items': [], 'metadata': {'continue': token}} for token in tokens]
     with pytest.raises(KubernetesProtocolError, match='cycle'):
-        _client()._paginate(lambda **kwargs: pages.pop(0))
+        _client()._paginate(lambda **_kwargs: pages.pop(0))
 
 
 def test_paginate_rejects_an_unbounded_sequence_of_unique_tokens(
@@ -73,7 +73,7 @@ def test_paginate_rejects_an_unbounded_sequence_of_unique_tokens(
     monkeypatch.setattr('autofission.kubernetes.MAX_LIST_PAGES', 2)
     counter = 0
 
-    def list_call(**kwargs: object) -> object:
+    def list_call(**_kwargs: object) -> object:
         nonlocal counter
         counter += 1
         return {'items': [], 'metadata': {'continue': f'token-{counter}'}}
@@ -85,7 +85,7 @@ def test_paginate_rejects_an_unbounded_sequence_of_unique_tokens(
 def test_paginate_restarts_once_after_resource_expired_without_mixing_items() -> None:
     calls = 0
 
-    def list_call(**kwargs: object) -> object:
+    def list_call(**_kwargs: object) -> object:
         nonlocal calls
         calls += 1
         if calls == 1:
@@ -99,7 +99,7 @@ def test_paginate_restarts_once_after_resource_expired_without_mixing_items() ->
 
 
 def test_paginate_propagates_a_second_resource_expired_error() -> None:
-    def list_call(**kwargs: object) -> object:
+    def list_call(**_kwargs: object) -> object:
         raise ApiException(status=410, reason='Expired')
 
     client = _client()
@@ -108,7 +108,7 @@ def test_paginate_propagates_a_second_resource_expired_error() -> None:
 
 
 def test_paginate_propagates_non_resource_expired_api_errors() -> None:
-    def list_call(**kwargs: object) -> object:
+    def list_call(**_kwargs: object) -> object:
         raise ApiException(status=403, reason='Forbidden')
 
     with pytest.raises(ApiException):
@@ -133,12 +133,12 @@ def test_paginate_rejects_malformed_api_documents(
     message: str,
 ) -> None:
     with pytest.raises(KubernetesProtocolError, match=message):
-        _client()._paginate(lambda **kwargs: document)
+        _client()._paginate(lambda **_kwargs: document)
 
 
 def test_paginate_sanitizes_official_client_models() -> None:
     model = SimpleNamespace(document={'items': ['model'], 'metadata': {}})
-    assert _client()._paginate(lambda **kwargs: model) == ['model']
+    assert _client()._paginate(lambda **_kwargs: model) == ['model']
 
 
 def test_public_list_methods_call_the_correct_apis() -> None:
@@ -298,7 +298,7 @@ def test_create_wraps_credential_loading_errors(
     monkeypatch: pytest.MonkeyPatch,
     in_cluster: bool,
 ) -> None:
-    def fail(**kwargs: object) -> None:
+    def fail(**_kwargs: object) -> None:
         raise RuntimeError('credentials unavailable')
 
     monkeypatch.setattr(

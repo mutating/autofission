@@ -8,8 +8,7 @@ import pytest
 from autofission import __version__
 from autofission.cli import _create_gateway, build_parser, main
 from autofission.errors import ConfigurationError
-
-from ..helpers import environment, function, node
+from tests.helpers import environment, function, node
 
 
 class FakeGateway:
@@ -25,6 +24,7 @@ class FakeGateway:
         return []
 
     def list_functions(self, label_selector: str) -> list[object]:
+        del label_selector
         if self.fail:
             raise RuntimeError('API unavailable')
         return [function()]
@@ -77,7 +77,7 @@ def test_help_and_version_do_not_construct_kubernetes_client(
 ) -> None:
     monkeypatch.setattr(
         'autofission.cli._create_gateway',
-        lambda **kwargs: pytest.fail('must not create client'),
+        lambda **_kwargs: pytest.fail('must not create client'),
     )
 
     with pytest.raises(SystemExit, match='0'):
@@ -92,7 +92,7 @@ def test_help_and_version_do_not_construct_kubernetes_client(
 def test_probe_does_not_construct_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         'autofission.cli._create_gateway',
-        lambda **kwargs: pytest.fail('must not create client'),
+        lambda **_kwargs: pytest.fail('must not create client'),
     )
     state = tmp_path / 'state'
     state.mkdir()
@@ -121,7 +121,7 @@ def test_once_runs_real_controller_and_closes_gateway(
     gateway = FakeGateway()
     monkeypatch.setattr(
         'autofission.cli._create_gateway',
-        lambda **kwargs: gateway,
+        lambda **_kwargs: gateway,
     )
     handlers: dict[signal.Signals, object] = {}
     monkeypatch.setattr(
@@ -145,9 +145,9 @@ def test_once_runtime_failure_returns_one_and_still_closes_gateway(
     gateway = FakeGateway(fail=True)
     monkeypatch.setattr(
         'autofission.cli._create_gateway',
-        lambda **kwargs: gateway,
+        lambda **_kwargs: gateway,
     )
-    monkeypatch.setattr('autofission.cli.signal.signal', lambda *args: None)
+    monkeypatch.setattr('autofission.cli.signal.signal', lambda *_args: None)
 
     assert main(['--once', '--state-directory', str(tmp_path)]) == 1
     assert gateway.closed
@@ -227,7 +227,7 @@ def test_invalid_controller_configuration_fails_before_client(
 ) -> None:
     monkeypatch.setattr(
         'autofission.cli._create_gateway',
-        lambda **kwargs: pytest.fail('must fail before client creation'),
+        lambda **_kwargs: pytest.fail('must fail before client creation'),
     )
     assert main(arguments) == 2
     assert capsys.readouterr().err.startswith('autofission:')
@@ -237,7 +237,7 @@ def test_client_configuration_error_returns_two(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    def fail(**kwargs: object) -> object:
+    def fail(**_kwargs: object) -> object:
         raise ConfigurationError('no credentials')
 
     monkeypatch.setattr('autofission.cli._create_gateway', fail)
@@ -254,18 +254,19 @@ def test_signal_handler_requests_cooperative_shutdown(
     callbacks: list[object] = []
     monkeypatch.setattr(
         'autofission.cli._create_gateway',
-        lambda **kwargs: gateway,
+        lambda **_kwargs: gateway,
     )
     monkeypatch.setattr(
         'autofission.cli.signal.signal',
-        lambda kind, callback: callbacks.append(callback),
+        lambda _kind, callback: callbacks.append(callback),
     )
 
     class StoppingRunner:
-        def __init__(self, *args: object, **kwargs: object) -> None:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
             self.stop_event = SimpleStop()
 
         def run(self, *, once: bool = False) -> int:
+            del once
             callbacks[0](signal.SIGTERM, None)  # type: ignore[operator]
             return 0 if self.stop_event.stopped else 1
 

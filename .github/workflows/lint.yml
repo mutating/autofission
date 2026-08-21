@@ -35,7 +35,7 @@ jobs:
           ruff check autofission tests
           ruff format --check autofission tests
 
-      - name: Strict mypy
+      - name: Strict mypy for Python ${{ matrix.python-version }}
         run: |
           mypy --strict autofission
           mypy tests

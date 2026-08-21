@@ -62,6 +62,26 @@ def test_release_versions_have_no_second_source_of_truth() -> None:
     assert '--version "$version" --app-version "$version"' in release
 
 
+def test_release_wheel_is_available_to_the_container_build() -> None:
+    dockerfile = (ROOT / 'Dockerfile').read_text(encoding='utf-8')
+    dockerignore = (ROOT / '.dockerignore').read_text(encoding='utf-8').splitlines()
+    release = (ROOT / '.github' / 'workflows' / 'release.yml').read_text(encoding='utf-8')
+    assert 'COPY dist/*.whl /wheels/' in dockerfile
+    assert 'dist' not in dockerignore
+    assert 'dist/' not in dockerignore
+    assert '!dist/*.whl' in dockerignore
+    assert 'skip-existing: true' in release
+
+
+def test_mypy_uses_the_matrix_interpreter_version() -> None:
+    pyproject = (ROOT / 'pyproject.toml').read_text(encoding='utf-8')
+    mypy_config = pyproject.split('[tool.mypy]', 1)[1].split('[[tool.mypy.overrides]]', 1)[0]
+    lint_workflow = (ROOT / '.github' / 'workflows' / 'lint.yml').read_text(encoding='utf-8')
+    assert 'python_version' not in mypy_config
+    assert 'python-version: ${{ matrix.python-version }}' in lint_workflow
+    assert 'mypy --strict autofission' in lint_workflow
+
+
 def test_chart_rbac_is_exactly_the_required_read_and_patch_surface() -> None:
     template = (CHART / 'templates' / 'rbac.yaml').read_text(encoding='utf-8')
     assert 'resources: ["nodes", "pods"]' in template

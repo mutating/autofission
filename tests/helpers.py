@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from copy import deepcopy
 
 
-def node(
+def node(  # noqa: PLR0913
     name: str = 'node-a',
     cpu: str = '4',
     memory: str = '8Gi',
@@ -48,7 +48,7 @@ def container(
     return result
 
 
-def pod(
+def pod(  # noqa: PLR0913
     name: str = 'pod-a',
     node_name: str | None = 'node-a',
     cpu: str = '100m',
@@ -75,7 +75,7 @@ def pod(
     }
 
 
-def environment(
+def environment(  # noqa: PLR0913
     name: str = 'python',
     namespace: str = 'fission-function',
     cpu: str | None = '250m',
@@ -99,7 +99,7 @@ def environment(
     }
 
 
-def function(
+def function(  # noqa: PLR0913
     name: str = 'hello',
     namespace: str = 'fission-function',
     uid: str = 'uid-1',

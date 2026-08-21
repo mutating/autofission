@@ -8,8 +8,7 @@ from hypothesis import strategies as st
 from autofission.capacity import ClusterSnapshot, pod_requests
 from autofission.models import Resources
 from autofission.quantities import parse_cpu_millicores, parse_quantity
-
-from ..helpers import container, node
+from tests.helpers import container, node
 
 
 @given(st.integers(min_value=-(10**12), max_value=10**12))

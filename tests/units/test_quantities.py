@@ -72,8 +72,8 @@ def test_parse_quantity_supports_kubernetes_grammar(
         '1e+',
         '1_000',
         '0x10',
-        '١',
-        '１２',
+        '١',  # noqa: RUF001 - deliberately invalid Unicode quantity
+        '１２',  # noqa: RUF001 - deliberately invalid Unicode quantity
         'x' * 129,
     ],
 )

@@ -55,7 +55,7 @@ class FunctionFactory:
         self._source = source
         self._created: list[FissionFunction] = []
 
-    def __call__(
+    def __call__(  # noqa: PLR0913
         self,
         *,
         cpu_millicores: int,
