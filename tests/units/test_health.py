@@ -29,6 +29,23 @@ def test_reset_creates_missing_parent_directories(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize('kind', ['readiness', 'liveness'])
+def test_mark_uses_the_health_clock(
+    kind: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    health = HealthFiles(tmp_path)
+    monkeypatch.setattr('autofission.health.time.time', lambda: 100)
+
+    if kind == 'readiness':
+        health.mark_ready()
+    else:
+        health.mark_live()
+
+    assert health.is_fresh(kind, 10, now=100)
+
+
+@pytest.mark.parametrize('kind', ['readiness', 'liveness'])
 def test_is_fresh_accepts_boundary_age(kind: str, tmp_path: Path) -> None:
     health = HealthFiles(tmp_path)
     path = health.readiness_path if kind == 'readiness' else health.liveness_path
