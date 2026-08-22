@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import dataclass
 from math import isfinite
@@ -29,10 +30,16 @@ class HealthFiles:
             path.unlink(missing_ok=True)
 
     def mark_ready(self) -> None:
-        self.readiness_path.touch()
+        self._mark(self.readiness_path)
 
     def mark_live(self) -> None:
-        self.liveness_path.touch()
+        self._mark(self.liveness_path)
+
+    @staticmethod
+    def _mark(path: Path) -> None:
+        path.touch()
+        timestamp = time.time()
+        os.utime(path, (timestamp, timestamp))
 
     def is_fresh(self, kind: str, max_age_seconds: float, now: float | None = None) -> bool:
         """Return true only for an existing, non-future marker within max age."""

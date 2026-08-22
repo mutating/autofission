@@ -245,8 +245,10 @@ def test_create_auto_selects_in_cluster_and_configures_get_retries(
 
 def test_create_loads_explicit_kubeconfig_and_context(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     loaded: list[dict[str, object]] = []
+    kubeconfig = tmp_path / 'config'
     monkeypatch.setenv('KUBERNETES_SERVICE_HOST', 'ignored')
     monkeypatch.setattr(
         'autofission.kubernetes.config.load_kube_config',
@@ -254,9 +256,9 @@ def test_create_loads_explicit_kubeconfig_and_context(
     )
     monkeypatch.setattr('autofission.kubernetes.client.ApiClient', FakeApiClient)
 
-    KubernetesClient.create(kubeconfig=Path('/tmp/config'), context='test')
+    KubernetesClient.create(kubeconfig=kubeconfig, context='test')
 
-    assert loaded[0]['config_file'] == '/tmp/config'
+    assert loaded[0]['config_file'] == str(kubeconfig)
     assert loaded[0]['context'] == 'test'
 
 
