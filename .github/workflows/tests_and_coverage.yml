@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   tests:
     runs-on: ${{ matrix.os }}
@@ -44,7 +48,6 @@ jobs:
         with:
           file: coverage.xml
           format: cobertura
-        continue-on-error: true
 
   package:
     runs-on: ubuntu-latest
@@ -168,4 +171,9 @@ jobs:
           helm template autofission deploy/helm/autofission --namespace fission > rendered.yaml
           test "$(grep -c '^kind: Deployment$' rendered.yaml)" -eq 1
           test "$(grep -c '^kind: ClusterRole$' rendered.yaml)" -eq 1
-          ! helm lint deploy/helm/autofission --set replicaCount=2
+          if helm lint deploy/helm/autofission --set replicaCount=2 2>&1 \
+            | tee invalid-replica-count.log; then
+            echo 'helm lint unexpectedly accepted replicaCount=2' >&2
+            exit 1
+          fi
+          grep --fixed-strings 'replicaCount' invalid-replica-count.log
