@@ -20,7 +20,9 @@
 
 Imagine a Kubernetes cluster that runs a set of services but still has unused capacity. Rather than leaving those resources idle, you could fill them with useful, elastic work that continuously adapts to whatever CPU, memory, and Pod capacity remains available.
 
-That opportunistic workload must also yield when the cluster is needed for something else. If you deploy another service, the elastic work should make room for it instead of turning spare-capacity use into permanent resource contention. AWS Lambda-style serverless functions are a natural fit for this role, and Autofission uses [Fission](https://fission.io/) to run them in Kubernetes.
+That opportunistic workload must also yield when the cluster is needed for something else. If you deploy another service, the elastic work should make room for it instead of turning spare-capacity use into permanent resource contention.
+
+Independent, disposable units of work are a good fit for this role: they can be packaged as AWS Lambda-like functions, and the workload can grow or shrink by changing how many function instances run at once. This project uses [Fission](https://fission.io/), a serverless framework that runs and scales such functions on Kubernetes.
 
 Fission, however, gives each autoscaled Function a fixed maximum replica count. That model works when the cluster's spare capacity is roughly constant, but it cannot make a Function track capacity that grows and shrinks as nodes and other workloads change. Autofission fills that gap: it makes Fission Functions capacity-aware so they can use the cluster's changing spare resources as an elastic workload.
 
