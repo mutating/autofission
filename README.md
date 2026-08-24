@@ -50,7 +50,7 @@ Use the Python CLI for optional local or one-shot runs. Install the Helm chart t
 
 ### Python CLI
 
-To follow the local CLI workflow below, you need `kubectl`, a usable Kubernetes context, and an existing Fission installation in that cluster. Install Autofission and verify the CLI:
+To follow the local CLI workflow below, you need Python, `kubectl`, a usable Kubernetes context, and an existing Fission installation in that cluster. Install Autofission and verify the CLI:
 
 ```bash
 python -m pip install autofission
