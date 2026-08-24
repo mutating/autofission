@@ -24,15 +24,13 @@ That opportunistic workload must also yield when the cluster is needed for somet
 
 Independent, disposable units of work are a good fit for this role: they can be packaged as AWS Lambda-like functions, and the workload can grow or shrink by changing how many function instances run at once. Managing those functions on Kubernetes requires a framework that deploys them, starts them on demand, and scales them. [Fission](https://fission.io/) provides that foundation.
 
-Fission is excellent at deploying and scaling functions, but it is not designed to treat unused cluster capacity as a dynamic resource budget. A Function using the [`newdeploy` executor](https://fission.io/docs/usage/function/executor/) has a fixed maximum replica count, `MaxScale`, which Fission uses as the upper bound of that Function's [Horizontal Pod Autoscaler (HPA)](https://kubernetes.io/docs/concepts/workloads/autoscaling/). Fission expects an operator to choose this ceiling; it does not derive it from the cluster's currently unused CPU, memory, or Pod capacity. Set the ceiling too low and useful capacity remains idle; set it too high and Fission can flood the scheduler with Pods that cannot fit.
+Fission is excellent at deploying and scaling functions, but it is not designed to treat unused cluster capacity as a dynamic resource budget. Instead, it expects an operator to decide in advance how far each Function may scale; it does not derive that ceiling from the cluster's currently unused capacity. Set the ceiling too low and useful capacity remains idle; set it too high and Fission can ask the cluster to run more functions than it has room for.
 
 That approach works when the capacity available to Fission is roughly constant. A shared cluster is rarely that static: services appear and disappear, new nodes join, and old nodes leave. An operator must therefore either dedicate a fixed amount of capacity to Fission and size every Function for that budget, or continually recalculate the Functions' limits as the rest of the cluster changes.
 
-Autofission automates the second approach. It scans schedulable nodes and their existing workloads, estimates current spare capacity from declared resource requests, and independently updates the `MaxScale` of each explicitly opted-in Function. This keeps Fission's scaling ceilings aligned with the cluster's changing spare resources without requiring manual retuning.
+Autofission automates the second approach. It continuously estimates how much capacity remains available in the cluster and updates the scaling limit of each explicitly opted-in Function. This keeps Fission aligned with the cluster's changing spare resources without requiring manual retuning.
 
 Autofission is designed for elastic, bare-metal, homelab, and edge clusters, where nodes come and go and idle compute should remain available to Functions without allowing them to preempt existing services.
-
-Autofission manages only `newdeploy` Functions and changes only `MaxScale`, along with informational annotations. It does not scale replicas itself: Fission's executor, HPA, and idle reaper still decide when each Function grows and shrinks.
 
 ## Table of Contents
 
@@ -143,6 +141,8 @@ Removing the label stops future management. Autofission deliberately does not gu
 
 
 ## How it works
+
+Autofission manages only Functions that use Fission's [`newdeploy` executor](https://fission.io/docs/usage/function/executor/). Each such Function has a fixed maximum replica count, `MaxScale`, which Fission uses as the upper bound of that Function's [Horizontal Pod Autoscaler (HPA)](https://kubernetes.io/docs/concepts/workloads/autoscaling/). Autofission changes only `MaxScale`, along with informational annotations. It does not scale replicas itself: Fission's executor, HPA, and idle reaper still decide when each Function grows and shrinks.
 
 ```mermaid
 flowchart TD
