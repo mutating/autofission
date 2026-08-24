@@ -18,6 +18,13 @@
 ![Autofission](https://raw.githubusercontent.com/pomponchik/autofission/develop/docs/assets/logo.svg)
 
 
+Imagine a Kubernetes cluster that runs a set of services but still has unused capacity. Rather than leaving those resources idle, you could fill them with useful, elastic work that continuously adapts to whatever CPU, memory, and Pod capacity remains available.
+
+That opportunistic workload must also yield when the cluster is needed for something else. If you deploy another service, the elastic work should make room for it instead of turning spare-capacity use into permanent resource contention. AWS Lambda-style serverless functions are a natural fit for this role, and Autofission uses [Fission](https://fission.io/) to run them in Kubernetes.
+
+Fission, however, gives each autoscaled Function a fixed maximum replica count. That model works when the cluster's spare capacity is roughly constant, but it cannot make a Function track capacity that grows and shrinks as nodes and other workloads change. Autofission fills that gap: it makes Fission Functions capacity-aware so they can use the cluster's changing spare resources as an elastic workload.
+
+
 Autofission independently calculates and updates each explicitly opted-in [Fission](https://fission.io/) Function's maximum replica limit (`MaxScale`). It estimates the limit from CPU, memory, and Pod capacity on schedulable Kubernetes nodes after accounting for other workloads.
 
 A Fission Function using the [`newdeploy` executor](https://fission.io/docs/usage/function/executor/) can scale down when demand disappears, but its [Horizontal Pod Autoscaler (HPA)](https://kubernetes.io/docs/concepts/workloads/autoscaling/) still has a fixed positive maximum (`maxReplicas`) derived from the Function's `MaxScale`. A limit sized for today's cluster becomes too low when nodes are added. An arbitrarily high limit can flood the scheduler with Pods that cannot fit.
