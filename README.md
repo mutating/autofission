@@ -49,15 +49,20 @@ Autofission is designed for elastic, bare-metal, homelab, and edge clusters, whe
 
 Autofission is a single Python application exposed through the `autofission` CLI. It can run one reconciliation cycle and exit, or remain running and repeat the cycle at a configured interval.
 
+Autofission can be installed in two ways:
+
+- As a Python package for local or one-shot runs.
+- As a Helm chart for continuous operation inside the cluster.
+
 Both modes require an [existing Fission installation](https://fission.io/docs/installation/) and access to the target Kubernetes cluster.
 
-For local or one-shot runs, install the Python package:
+For the Python package option, run:
 
 ```bash
 pip install autofission
 ```
 
-To run Autofission continuously inside the cluster, install the Helm chart instead. This requires permission to create namespaced and cluster-scoped resources:
+For the Helm chart option, use the OCI release below. This requires permission to create namespaced and cluster-scoped resources:
 
 ```bash
 helm upgrade --install autofission \
