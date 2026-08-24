@@ -67,14 +67,13 @@ For the Helm chart option, use the OCI release below. This requires permission t
 ```bash
 helm upgrade --install autofission \
   oci://ghcr.io/pomponchik/charts/autofission \
-  --version VERSION \
   --namespace fission \
   --create-namespace \
   --atomic \
   --wait
 ```
 
-Replace `VERSION` with a published Autofission version. The Python package and Helm chart use the same version number.
+> ⓘ For reproducible deployments, pin a published chart version by adding `--version VERSION`.
 
 Function Pods managed by Autofission must use a low, non-preempting PriorityClass. The Helm chart creates `autofission-runtime`; configure Fission to apply it to runtime Pods:
 
