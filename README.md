@@ -50,14 +50,12 @@ Use the Python CLI for optional local or one-shot runs. Install the Helm chart t
 
 ### Python CLI
 
-To follow the local CLI workflow below, you need Python 3.8 or newer, `kubectl`, a usable Kubernetes context, and an existing Fission installation in that cluster. Install Autofission and verify the CLI:
+To follow the local CLI workflow below, you need `kubectl`, a usable Kubernetes context, and an existing Fission installation in that cluster. Install Autofission and verify the CLI:
 
 ```bash
 python -m pip install autofission
 autofission --help
 ```
-
-CI tests Python 3.8 through 3.14, free-threaded Python 3.14, and Python 3.15 beta.
 
 Without credential-selection flags, the CLI uses mounted ServiceAccount credentials when `KUBERNETES_SERVICE_HOST` is non-empty; otherwise, it uses the current `kubeconfig` context. Pass `--in-cluster` to select the ServiceAccount explicitly.
 
