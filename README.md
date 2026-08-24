@@ -24,11 +24,13 @@ That opportunistic workload must also yield when the cluster is needed for somet
 
 Independent, disposable units of work are a good fit for this role: they can be packaged as AWS Lambda-like functions, and the workload can grow or shrink by changing how many function instances run at once. Managing those functions on Kubernetes requires a framework that deploys them, starts them on demand, and scales them. [Fission](https://fission.io/) provides that foundation.
 
-Fission is excellent at deploying and scaling functions, but it is not designed to treat unused cluster capacity as a dynamic resource budget. A Function using the [`newdeploy` executor](https://fission.io/docs/usage/function/executor/) has a fixed maximum replica count, `MaxScale`, which Fission uses as the upper bound of that Function's [Horizontal Pod Autoscaler (HPA)](https://kubernetes.io/docs/concepts/workloads/autoscaling/). Fission expects an operator to choose this ceiling; it does not derive it from the cluster's currently unused CPU, memory, or Pod capacity.
+Fission is excellent at deploying and scaling functions, but it is not designed to treat unused cluster capacity as a dynamic resource budget. A Function using the [`newdeploy` executor](https://fission.io/docs/usage/function/executor/) has a fixed maximum replica count, `MaxScale`, which Fission uses as the upper bound of that Function's [Horizontal Pod Autoscaler (HPA)](https://kubernetes.io/docs/concepts/workloads/autoscaling/). Fission expects an operator to choose this ceiling; it does not derive it from the cluster's currently unused CPU, memory, or Pod capacity. Set the ceiling too low and useful capacity remains idle; set it too high and Fission can flood the scheduler with Pods that cannot fit.
 
 That approach works when the capacity available to Fission is roughly constant. A shared cluster is rarely that static: services appear and disappear, new nodes join, and old nodes leave. An operator must therefore either dedicate a fixed amount of capacity to Fission and size every Function for that budget, or continually recalculate the Functions' limits as the rest of the cluster changes.
 
 Autofission automates the second approach. It scans schedulable nodes and their existing workloads, estimates current spare capacity from declared resource requests, and independently updates the `MaxScale` of each explicitly opted-in Function. This keeps Fission's scaling ceilings aligned with the cluster's changing spare resources without requiring manual retuning.
+
+Autofission is designed for elastic, bare-metal, homelab, and edge clusters, where nodes come and go and idle compute should remain available to Functions without allowing them to preempt existing services.
 
 Autofission manages only `newdeploy` Functions and changes only `MaxScale`, along with informational annotations. It does not scale replicas itself: Fission's executor, HPA, and idle reaper still decide when each Function grows and shrinks.
 
@@ -154,7 +156,7 @@ flowchart TD
 Given the same controller settings and Function, Environment, Node, and Pod data, each cycle produces the same result without unnecessary patches:
 
 1. List opted-in Functions, along with Fission Environments, Kubernetes Nodes, and Pods.
-2. Keep schedulable `Ready` nodes and subtract the CPU, memory, and Pod slots requested by their existing workloads.
+2. Keep schedulable `Ready` nodes and subtract the CPU, memory, and Pod slots requested by their existing workloads. Pod requests follow Kubernetes scheduling semantics, including init containers, restartable sidecars, Pod-level requests, and Pod overhead.
 3. Resolve the resources required by one replica of each Function from its Function, Environment, fetcher, and observed runtime Pod configuration.
 4. For each Function independently, estimate how many total replicas fit across the remaining per-node capacity, including replicas that are already running.
 5. Update `MaxScale` to the calculated capacity, but never below `MinScale` or `1`.
@@ -204,6 +206,8 @@ Treat permission to set the opt-in label as permission to consume the cluster's 
 ## Operations
 
 The chart runs one replica with a `Recreate` strategy, preventing overlap during Deployment-managed rollouts. This rollout behavior does not guarantee a single active controller at all times because Autofission has no leader election. After a node or cluster restart, the Deployment restores its controller replica and Autofission rebuilds its state from the API.
+
+Function patches include a `resourceVersion` precondition. If a Function changes after Autofission reads it, the patch fails with a conflict instead of overwriting the concurrent change; the daemon retries the Function during its next cycle.
 
 Useful checks for the default release name, namespace, and ServiceAccount:
 
