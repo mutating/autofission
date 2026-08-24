@@ -24,16 +24,13 @@ That opportunistic workload must also yield when the cluster is needed for somet
 
 Independent, disposable units of work are a good fit for this role: they can be packaged as AWS Lambda-like functions, and the workload can grow or shrink by changing how many function instances run at once. Managing those functions on Kubernetes requires a framework that deploys them, starts them on demand, and scales them. [Fission](https://fission.io/) provides that foundation.
 
-Fission, however, gives each autoscaled Function a fixed maximum replica count. That model works when the cluster's spare capacity is roughly constant, but it cannot make a Function track capacity that grows and shrinks as nodes and other workloads change. Autofission fills that gap: it makes Fission Functions capacity-aware so they can use the cluster's changing spare resources as an elastic workload.
+Fission is excellent at deploying and scaling functions, but it is not designed to treat unused cluster capacity as a dynamic resource budget. A Function using the [`newdeploy` executor](https://fission.io/docs/usage/function/executor/) has a fixed maximum replica count, `MaxScale`, which Fission uses as the upper bound of that Function's [Horizontal Pod Autoscaler (HPA)](https://kubernetes.io/docs/concepts/workloads/autoscaling/). Fission expects an operator to choose this ceiling; it does not derive it from the cluster's currently unused CPU, memory, or Pod capacity.
 
+That approach works when the capacity available to Fission is roughly constant. A shared cluster is rarely that static: services appear and disappear, new nodes join, and old nodes leave. An operator must therefore either dedicate a fixed amount of capacity to Fission and size every Function for that budget, or continually recalculate the Functions' limits as the rest of the cluster changes.
 
-Autofission independently calculates and updates each explicitly opted-in [Fission](https://fission.io/) Function's maximum replica limit (`MaxScale`). It estimates the limit from CPU, memory, and Pod capacity on schedulable Kubernetes nodes after accounting for other workloads.
+Autofission automates the second approach. It scans schedulable nodes and their existing workloads, estimates current spare capacity from declared resource requests, and independently updates the `MaxScale` of each explicitly opted-in Function. This keeps Fission's scaling ceilings aligned with the cluster's changing spare resources without requiring manual retuning.
 
-A Fission Function using the [`newdeploy` executor](https://fission.io/docs/usage/function/executor/) can scale down when demand disappears, but its [Horizontal Pod Autoscaler (HPA)](https://kubernetes.io/docs/concepts/workloads/autoscaling/) still has a fixed positive maximum (`maxReplicas`) derived from the Function's `MaxScale`. A limit sized for today's cluster becomes too low when nodes are added. An arbitrarily high limit can flood the scheduler with Pods that cannot fit.
-
-Autofission keeps the limit current by estimating available capacity on each node. It subtracts the declared CPU and memory requests of existing workloads and counts their Pods against each node's Pod limit, then adds back the capacity used by the Function's own replicas. The add-back is required because `MaxScale` limits the total number of replicas, including those already running. Autofission is designed for elastic, bare-metal, homelab, and edge clusters where nodes come and go and idle compute should remain available to Functions without scheduler preemption of existing services.
-
-The only scaling setting Autofission changes is `MaxScale`; it also records the calculation in annotations. Fission's executor, HPA, and idle reaper still decide when the replica count grows and shrinks.
+Autofission manages only `newdeploy` Functions and changes only `MaxScale`, along with informational annotations. It does not scale replicas itself: Fission's executor, HPA, and idle reaper still decide when each Function grows and shrinks.
 
 ## Table of Contents
 
@@ -157,11 +154,10 @@ flowchart TD
 Given the same controller settings and Function, Environment, Node, and Pod data, each cycle produces the same result without unnecessary patches:
 
 1. List opted-in Functions, along with Fission Environments, Kubernetes Nodes, and Pods.
-2. Keep `Ready`, uncordoned, non-deleting nodes. Nodes with `NoSchedule` or `NoExecute` taints are excluded by default.
-3. For every non-terminal Pod scheduled to an eligible node, calculate the declared [CPU and memory requests](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/) from the fields exposed by the installed Kubernetes client. Round CPU up to whole millicores and memory up to whole bytes. After rounding, combine regular- and init-container requests using Kubernetes scheduling rules, including restartable sidecars. For CPU and memory separately, keep the larger of the aggregated container request and any Pod-level request, then add Pod overhead.
-4. Resolve each Function's CPU and memory requests, inheriting missing or zero values from its Environment, then add the fetcher request. For CPU and memory separately, use the larger of that estimate and the largest corresponding request observed on its non-terminal Pods—identified by a matching `functionUid` label—scheduled to an eligible node.
-5. When calculating a Function's limit, subtract the CPU, memory, and Pod-slot usage of its existing Pods from the workload usage counted in step 3, because `MaxScale` is a total-replica limit that already includes them. This changes only the calculation, not the Pods. Then calculate how many replicas, using the requests from step 4, fit on each node. Sum the per-node results; spare CPU on one node cannot combine with spare memory on another.
-6. Set `MaxScale` to the calculated capacity, but never below `MinScale` or `1`. Patch a Function when either `MaxScale` or Autofission's calculation annotations have changed. A `resourceVersion` conflict prevents concurrent edits from being overwritten.
+2. Keep schedulable `Ready` nodes and subtract the CPU, memory, and Pod slots requested by their existing workloads.
+3. Resolve the resources required by one replica of each Function from its Function, Environment, fetcher, and observed runtime Pod configuration.
+4. For each Function independently, estimate how many total replicas fit across the remaining per-node capacity, including replicas that are already running.
+5. Update `MaxScale` to the calculated capacity, but never below `MinScale` or `1`.
 
 The controller processes each Function independently, so an invalid or conflicting Function does not block the others. However, any global or per-Function error prevents that cycle from refreshing the readiness marker. A failed cycle does not immediately invalidate the marker: the previous successful marker remains fresh until the configured maximum age expires (`60` seconds by default). The readiness probe must then fail for its configured `failureThreshold` before Kubernetes reports the Pod as `NotReady`.
 
