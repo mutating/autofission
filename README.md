@@ -46,7 +46,9 @@ Autofission is designed for elastic, bare-metal, homelab, and edge clusters, whe
 
 ## Installation
 
-Use the Python CLI for optional local or one-shot runs. Install the Helm chart to run Autofission continuously in a cluster.
+Autofission is a single Python application exposed through the `autofission` CLI. It can perform one reconciliation cycle and exit, or remain running and repeat the same cycle at a configured interval. The Helm chart deploys this same application as a controller Pod inside the cluster; there is no separate scheduler or CronJob that repeatedly invokes the CLI.
+
+Install the Python package for local or one-shot runs. Install the Helm chart to run Autofission continuously in a cluster.
 
 ### Python CLI
 
