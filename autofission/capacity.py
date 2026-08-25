@@ -392,16 +392,14 @@ class ClusterSnapshot:
                     observed[allocation.function_uid] = observed[allocation.function_uid].maximum(
                         allocation.resources,
                     )
-                continue
-            if allocation.node_name not in node_map:
-                continue
-            used[allocation.node_name] += allocation.resources
-            used_slots[allocation.node_name] += 1
-            if allocation.function_uid:
-                uid = allocation.function_uid
-                function_used[uid][allocation.node_name] += allocation.resources
-                function_slots[uid][allocation.node_name] += 1
-                observed[uid] = observed[uid].maximum(allocation.resources)
+            elif allocation.node_name in node_map:
+                used[allocation.node_name] += allocation.resources
+                used_slots[allocation.node_name] += 1
+                if allocation.function_uid:
+                    uid = allocation.function_uid
+                    function_used[uid][allocation.node_name] += allocation.resources
+                    function_slots[uid][allocation.node_name] += 1
+                    observed[uid] = observed[uid].maximum(allocation.resources)
 
         total_function_used: defaultdict[str, Resources] = defaultdict(Resources)
         total_function_slots: defaultdict[str, int] = defaultdict(int)
