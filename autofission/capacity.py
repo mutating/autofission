@@ -206,7 +206,9 @@ def _node_resources(node: object, *, include_tainted: bool) -> NodeResources | N
 
 @dataclass(frozen=True)
 class _PodAllocation:
-    node_name: str
+    identity: str
+    node_name: str | None
+    nominated_node_name: str | None
     resources: Resources
     function_uid: str | None
 
@@ -221,13 +223,25 @@ def _pod_allocation(pod: object) -> _PodAllocation | None:
     if phase is not None and not isinstance(phase, str):
         raise CapacityError('pod.status.phase must be a string')
 
-    node_name = spec.get('nodeName')
-    if node_name in (None, ''):
-        return None
-    if not isinstance(node_name, str):
+    node_name_value = spec.get('nodeName')
+    if node_name_value is not None and not isinstance(node_name_value, str):
         raise CapacityError('pod.spec.nodeName must be a string')
+    node_name = node_name_value or None
+
+    nominated_value = status.get('nominatedNodeName')
+    if nominated_value is not None and not isinstance(nominated_value, str):
+        raise CapacityError('pod.status.nominatedNodeName must be a string')
+    nominated_node_name = nominated_value or None
 
     metadata = _object(pod_object.get('metadata', {}), 'pod.metadata')
+    name = _name(metadata, 'pod')
+    namespace_value = metadata.get('namespace')
+    if namespace_value is None:
+        identity = name
+    elif isinstance(namespace_value, str) and namespace_value:
+        identity = f'{namespace_value}/{name}'
+    else:
+        raise CapacityError('pod.metadata.namespace must be a non-empty string')
     labels_value = metadata.get('labels')
     function_uid: str | None = None
     if labels_value is not None:
@@ -236,7 +250,82 @@ def _pod_allocation(pod: object) -> _PodAllocation | None:
         if uid_value is not None and not isinstance(uid_value, str):
             raise CapacityError('pod functionUid label must be a string')
         function_uid = uid_value
-    return _PodAllocation(node_name, pod_requests(spec), function_uid)
+    return _PodAllocation(
+        identity,
+        node_name,
+        nominated_node_name,
+        pod_requests(spec),
+        function_uid,
+    )
+
+
+def _fits(resources: Resources, slots: int, request: Resources) -> bool:
+    return (
+        slots > 0
+        and resources.cpu_millicores >= request.cpu_millicores
+        and resources.memory_bytes >= request.memory_bytes
+    )
+
+
+def _reserve_unbound_pods(
+    nodes: Mapping[str, NodeResources],
+    ordinary_used: Mapping[str, Resources],
+    ordinary_used_slots: Mapping[str, int],
+    pending: Iterable[_PodAllocation],
+) -> tuple[dict[str, Resources], dict[str, int]]:
+    """Virtually place ordinary pending Pods after reclaiming Function Pods."""
+    free: dict[str, Resources] = {}
+    free_slots: dict[str, int] = {}
+    for name, node in nodes.items():
+        free[name] = Resources(
+            max(
+                node.allocatable.cpu_millicores
+                - ordinary_used.get(name, Resources()).cpu_millicores,
+                0,
+            ),
+            max(
+                node.allocatable.memory_bytes - ordinary_used.get(name, Resources()).memory_bytes,
+                0,
+            ),
+        )
+        free_slots[name] = max(node.pod_slots - ordinary_used_slots.get(name, 0), 0)
+
+    reserved: defaultdict[str, Resources] = defaultdict(Resources)
+    reserved_slots: defaultdict[str, int] = defaultdict(int)
+    ordered = sorted(
+        (allocation for allocation in pending if allocation.function_uid is None),
+        key=lambda allocation: (
+            -allocation.resources.cpu_millicores,
+            -allocation.resources.memory_bytes,
+            allocation.identity,
+        ),
+    )
+    for allocation in ordered:
+        if allocation.nominated_node_name is not None:
+            candidates = [allocation.nominated_node_name]
+        else:
+            candidates = list(nodes)
+        fitting = [
+            name
+            for name in candidates
+            if name in nodes and _fits(free[name], free_slots[name], allocation.resources)
+        ]
+        if not fitting:
+            continue
+        selected = min(
+            fitting,
+            key=lambda name: (
+                free[name].cpu_millicores - allocation.resources.cpu_millicores,
+                free[name].memory_bytes - allocation.resources.memory_bytes,
+                free_slots[name] - 1,
+                name,
+            ),
+        )
+        free[selected] -= allocation.resources
+        free_slots[selected] -= 1
+        reserved[selected] += allocation.resources
+        reserved_slots[selected] += 1
+    return dict(reserved), dict(reserved_slots)
 
 
 class ClusterSnapshot:
@@ -250,6 +339,8 @@ class ClusterSnapshot:
         function_used: Mapping[str, Mapping[str, Resources]],
         function_slots: Mapping[str, Mapping[str, int]],
         observed_requests: Mapping[str, Resources],
+        pending_reserved: Mapping[str, Resources],
+        pending_reserved_slots: Mapping[str, int],
     ) -> None:
         self._nodes = dict(nodes)
         self._used = dict(used)
@@ -257,6 +348,8 @@ class ClusterSnapshot:
         self._function_used = {uid: dict(resources) for uid, resources in function_used.items()}
         self._function_slots = {uid: dict(slots) for uid, slots in function_slots.items()}
         self._observed_requests = dict(observed_requests)
+        self._pending_reserved = dict(pending_reserved)
+        self._pending_reserved_slots = dict(pending_reserved_slots)
 
     @classmethod
     def build(
@@ -287,10 +380,20 @@ class ClusterSnapshot:
             lambda: defaultdict(int),
         )
         observed: defaultdict[str, Resources] = defaultdict(Resources)
+        pending: list[_PodAllocation] = []
 
         for pod in pods:
             allocation = _pod_allocation(pod)
-            if allocation is None or allocation.node_name not in node_map:
+            if allocation is None:
+                continue
+            if allocation.node_name is None:
+                pending.append(allocation)
+                if allocation.function_uid:
+                    observed[allocation.function_uid] = observed[allocation.function_uid].maximum(
+                        allocation.resources,
+                    )
+                continue
+            if allocation.node_name not in node_map:
                 continue
             used[allocation.node_name] += allocation.resources
             used_slots[allocation.node_name] += 1
@@ -300,6 +403,28 @@ class ClusterSnapshot:
                 function_slots[uid][allocation.node_name] += 1
                 observed[uid] = observed[uid].maximum(allocation.resources)
 
+        total_function_used: defaultdict[str, Resources] = defaultdict(Resources)
+        total_function_slots: defaultdict[str, int] = defaultdict(int)
+        for resources_by_node in function_used.values():
+            for name, resources in resources_by_node.items():
+                total_function_used[name] += resources
+        for slots_by_node in function_slots.values():
+            for name, slots in slots_by_node.items():
+                total_function_slots[name] += slots
+        ordinary_used = {
+            name: used.get(name, Resources()) - total_function_used.get(name, Resources())
+            for name in node_map
+        }
+        ordinary_used_slots = {
+            name: used_slots.get(name, 0) - total_function_slots.get(name, 0) for name in node_map
+        }
+        pending_reserved, pending_reserved_slots = _reserve_unbound_pods(
+            node_map,
+            ordinary_used,
+            ordinary_used_slots,
+            pending,
+        )
+
         return cls(
             node_map,
             used,
@@ -307,6 +432,8 @@ class ClusterSnapshot:
             function_used,
             function_slots,
             observed,
+            pending_reserved,
+            pending_reserved_slots,
         )
 
     @property
@@ -329,8 +456,16 @@ class ClusterSnapshot:
         own_used = self._function_used.get(function_uid, {})
         own_slots = self._function_slots.get(function_uid, {})
         for name, node in self._nodes.items():
-            used = self._used.get(name, Resources()) - own_used.get(name, Resources())
-            slots = self._used_slots.get(name, 0) - own_slots.get(name, 0)
+            used = (
+                self._used.get(name, Resources())
+                - own_used.get(name, Resources())
+                + self._pending_reserved.get(name, Resources())
+            )
+            slots = (
+                self._used_slots.get(name, 0)
+                - own_slots.get(name, 0)
+                + self._pending_reserved_slots.get(name, 0)
+            )
             free_cpu = max(node.allocatable.cpu_millicores - used.cpu_millicores, 0)
             free_memory = max(node.allocatable.memory_bytes - used.memory_bytes, 0)
             free_slots = max(node.pod_slots - slots, 0)
