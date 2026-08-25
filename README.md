@@ -75,7 +75,9 @@ helm upgrade --install autofission \
 
 > ⓘ For reproducible deployments, pin a published chart version by adding `--version VERSION`.
 
-Function Pods managed by Autofission must use a low, non-preempting PriorityClass. The Helm chart creates `autofission-runtime`; configure Fission to apply it to runtime Pods:
+Function Pods are opportunistic workloads and must yield cluster capacity to regular services. The Autofission Helm chart creates a PriorityClass named `autofission-runtime`. The class gives Function Pods a lower priority than ordinary Pods and prevents them from preempting other workloads. Higher-priority services can therefore reclaim their resources when necessary.
+
+Fission creates the Function Pods, so it must be configured to assign this PriorityClass to them:
 
 ```yaml
 runtimePodSpec:
