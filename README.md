@@ -75,9 +75,11 @@ helm upgrade --install autofission \
 
 > ⓘ For reproducible deployments, add `--version VERSION`, replacing `VERSION` with the Autofission release number published on [PyPI](https://pypi.org/project/autofission/). The Python package and Helm chart use the same version number.
 
-Functions managed by Autofission are meant to use only spare cluster capacity. They should fill resources left idle by regular services, then give those resources back when the cluster needs them for something more important. Kubernetes represents this relationship with PriorityClasses. The Autofission Helm chart creates a low, non-preempting PriorityClass named `autofission-runtime`. Function Pods using this class cannot evict other workloads, but higher-priority services can evict them and take their place when the cluster is full.
+Functions managed by Autofission are background workloads. They should run only in space that regular services are not using. When a regular service needs that space, the Function Pods must move out of the way.
 
-Fission creates the Function Pods, so this setting belongs to Fission rather than Autofission. Add the following block to the Helm values file used for your Fission installation, then apply that file with the same `helm upgrade` command you use to manage Fission. The repository also includes the same block as a ready-to-use [values file](deploy/fission-values.yaml), which you can pass alongside your existing Fission values files:
+Kubernetes has a built-in mechanism for this: a PriorityClass tells the scheduler which Pods are more important. The Autofission Helm chart creates a low-priority class named `autofission-runtime`. Kubernetes will never remove another workload to make room for a Function Pod using this class. If a regular service needs the space occupied by such a Function Pod, Kubernetes can stop the Function Pod and use its place for the service.
+
+Autofission does not create Function Pods itself—Fission does. You must therefore tell Fission to assign `autofission-runtime` to every Function Pod it creates. Add the following block to the Helm values you already use for Fission:
 
 ```yaml
 runtimePodSpec:
@@ -85,6 +87,8 @@ runtimePodSpec:
   podSpec:
     priorityClassName: autofission-runtime
 ```
+
+Then upgrade Fission with those values, using the same `helm upgrade` command you normally use to manage it. Instead of copying the block manually, you can pass the ready-made [values file](deploy/fission-values.yaml) alongside your other Fission values files.
 
 CLI-only installations must provide an equivalent PriorityClass separately; pass its name with `--runtime-priority-class` to check existing Function Pods. See [Operations](#operations) for existing Fission workloads, [Configuration](#configuration) for credentials and resource-request settings, and [RBAC and security](#rbac-and-security) for required permissions.
 
