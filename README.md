@@ -73,7 +73,7 @@ helm upgrade --install autofission \
   --wait
 ```
 
-> ⓘ For reproducible deployments, pin a published chart version by adding `--version VERSION`.
+> ⓘ For reproducible deployments, add `--version VERSION`, replacing `VERSION` with the Autofission release number published on [PyPI](https://pypi.org/project/autofission/). The Python package and Helm chart use the same version number.
 
 Function Pods are opportunistic workloads and must yield cluster capacity to regular services. The Autofission Helm chart creates a PriorityClass named `autofission-runtime`. The class gives Function Pods a lower priority than ordinary Pods and prevents them from preempting other workloads. Higher-priority services can therefore reclaim their resources when necessary.
 
