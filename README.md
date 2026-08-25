@@ -79,7 +79,7 @@ Functions managed by Autofission are meant to use only spare cluster capacity. T
 
 Kubernetes represents this relationship with PriorityClasses. The Autofission Helm chart creates a low, non-preempting PriorityClass named `autofission-runtime`. Function Pods using this class cannot evict other workloads, but higher-priority services can evict them and take their place when the cluster is full.
 
-Fission creates the Function Pods, so this setting belongs to Fission rather than Autofission. Add the following block to the Helm values file used for your Fission installation, then apply that file with the same `helm upgrade` command you use to manage Fission:
+Fission creates the Function Pods, so this setting belongs to Fission rather than Autofission. Add the following block to the Helm values file used for your Fission installation, then apply that file with the same `helm upgrade` command you use to manage Fission. The repository also includes the same block as a ready-to-use [values file](deploy/fission-values.yaml), which you can pass alongside your existing Fission values files:
 
 ```yaml
 runtimePodSpec:
@@ -88,7 +88,7 @@ runtimePodSpec:
     priorityClassName: autofission-runtime
 ```
 
-CLI-only installations must provide an equivalent PriorityClass separately. See [Operations](#operations) for existing Fission workloads, [Configuration](#configuration) for credentials and resource-request settings, and [RBAC and security](#rbac-and-security) for required permissions.
+CLI-only installations must provide an equivalent PriorityClass separately; pass its name with `--runtime-priority-class` to check existing Function Pods. See [Operations](#operations) for existing Fission workloads, [Configuration](#configuration) for credentials and resource-request settings, and [RBAC and security](#rbac-and-security) for required permissions.
 
 
 ## Quick start
@@ -157,6 +157,7 @@ CLI flags take precedence over valid, non-empty environment variables, which tak
 | `--fetcher-memory-request` | `AUTOFISSION_FETCHER_MEMORY_REQUEST` | `controller.fetcherMemoryRequest` | `16Mi` |
 | `--managed-label` | `AUTOFISSION_MANAGED_LABEL` | `controller.managedLabel` | `autoscaling.fission.io/cluster-capacity` |
 | `--managed-value` | `AUTOFISSION_MANAGED_VALUE` | `controller.managedValue` | `true` |
+| `--runtime-priority-class` | `AUTOFISSION_RUNTIME_PRIORITY_CLASS` | `priorityClasses.runtime.name` | disabled (CLI); rendered runtime class (chart) |
 | `--include-tainted-nodes` | `AUTOFISSION_INCLUDE_TAINTED_NODES` | `controller.includeTaintedNodes` | `false` |
 | `--log-level` | `AUTOFISSION_LOG_LEVEL` | `controller.logLevel` | `INFO` |
 | `--state-directory` | `AUTOFISSION_STATE_DIRECTORY` | — | `/tmp/autofission` (CLI); `/var/run/autofission` (chart) |
@@ -193,7 +194,9 @@ The chart runs one replica with a `Recreate` strategy, preventing overlap during
 
 Function patches include a `resourceVersion` precondition. If a Function changes after Autofission reads it, the patch fails with a conflict instead of overwriting the concurrent change; the daemon retries the Function during its next cycle.
 
-Fission's `runtimePodSpec` setting is global: Fission merges its supported fields, including defaults supplied by its chart, into both `poolmgr` and `newdeploy` runtime Pods. After enabling or changing it, restart the Fission executor so it reads the new setting. Fission may not update existing `newdeploy` Deployment templates, so verify that each Function Deployment managed by Autofission uses the configured runtime PriorityClass before opting in that Function.
+Fission's `runtimePodSpec` setting is global: Fission merges its supported fields, including defaults supplied by its chart, into both `poolmgr` and `newdeploy` runtime Pods. After enabling or changing it, restart the Fission executor so it reads the new setting. Fission may not update existing `newdeploy` Deployment templates, so recreate or update them before opting in those Functions.
+
+The Helm-installed controller checks every existing, non-terminal Pod belonging to a managed Function and rejects that Function if its `priorityClassName` does not match the class created by the chart. The error explains how to correct Fission. A Function without any existing Pods cannot be checked this way; configure `runtimePodSpec` before opting it in so its first cold-start Pod receives the class. CLI-only runs can enable the same check with `--runtime-priority-class NAME`.
 
 Useful checks for the default release name, namespace, and ServiceAccount:
 
