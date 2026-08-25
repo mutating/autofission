@@ -56,6 +56,7 @@ def pod(  # noqa: PLR0913
     *,
     phase: object = 'Running',
     function_uid: object = None,
+    namespace: str | None = None,
     extra_spec: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     labels: dict[str, object] = {}
@@ -68,8 +69,11 @@ def pod(  # noqa: PLR0913
         spec['nodeName'] = node_name
     if extra_spec:
         spec.update(deepcopy(dict(extra_spec)))
+    metadata: dict[str, object] = {'name': name, 'labels': labels}
+    if namespace is not None:
+        metadata['namespace'] = namespace
     return {
-        'metadata': {'name': name, 'labels': labels},
+        'metadata': metadata,
         'spec': spec,
         'status': {'phase': phase},
     }

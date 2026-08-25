@@ -1,0 +1,5 @@
+# Pass this file alongside the existing values files used to manage Fission.
+runtimePodSpec:
+  enabled: true
+  podSpec:
+    priorityClassName: autofission-runtime

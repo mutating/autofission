@@ -169,6 +169,14 @@ def test_cli_arguments_override_environment_and_empty_environment_uses_default(
     assert arguments.fetcher_memory_request == '32Mi'
 
 
+def test_runtime_priority_class_can_be_set_by_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv('AUTOFISSION_RUNTIME_PRIORITY_CLASS', 'elastic-runtime')
+
+    assert build_parser().parse_args([]).runtime_priority_class == 'elastic-runtime'
+
+
 def test_boolean_environment_and_cli_negation(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv('AUTOFISSION_INCLUDE_TAINTED_NODES', 'TRUE')
     assert build_parser().parse_args([]).include_tainted_nodes is True

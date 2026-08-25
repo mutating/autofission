@@ -153,6 +153,44 @@ def test_reconcile_observes_larger_real_function_pod_request() -> None:
     assert maximum == 4
 
 
+def test_reconcile_validates_existing_function_pod_priority_class(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    wrong = pod(
+        name='hello-abc',
+        namespace='fission-function',
+        function_uid='uid-1',
+        extra_spec={'priorityClassName': 'default'},
+    )
+    gateway = FakeGateway(pods=[wrong])
+    config = ControllerConfig(runtime_priority_class='autofission-runtime')
+
+    with caplog.at_level(logging.ERROR), pytest.raises(ReconcileError):
+        Controller(gateway, config).reconcile()
+
+    assert gateway.patches == []
+    assert 'fission-function/hello-abc' in caplog.text
+    assert "priorityClassName 'default'; expected 'autofission-runtime'" in caplog.text
+    assert 'Configure Fission runtimePodSpec.podSpec.priorityClassName' in caplog.text
+
+
+def test_reconcile_accepts_expected_priority_and_ignores_terminal_old_pods() -> None:
+    expected = pod(
+        function_uid='uid-1',
+        extra_spec={'priorityClassName': 'autofission-runtime'},
+    )
+    old = pod(
+        name='old',
+        phase='Succeeded',
+        function_uid='uid-1',
+        extra_spec={'priorityClassName': 'wrong'},
+    )
+    gateway = FakeGateway(pods=[expected, old])
+    config = ControllerConfig(runtime_priority_class='autofission-runtime')
+
+    assert Controller(gateway, config).reconcile().updated_functions == 1
+
+
 def test_reconcile_skips_unmanaged_and_terminating_functions() -> None:
     unmanaged = function(name='plain', managed=False)
     no_labels = function(name='none')
@@ -352,6 +390,7 @@ def test_controller_does_not_mutate_input_objects(config: ControllerConfig) -> N
         ({'fetcher_request': Resources(0, -1)}, 'memory'),
         ({'managed_label': ''}, 'label'),
         ({'managed_value': ''}, 'value'),
+        ({'runtime_priority_class': ''}, 'priority class'),
     ],
 )
 def test_controller_config_validation(kwargs: dict[str, object], message: str) -> None:

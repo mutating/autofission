@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Mapping as TypingMapping
@@ -22,6 +23,8 @@ MANAGED_LABEL = 'autoscaling.fission.io/cluster-capacity'
 MANAGED_VALUE = 'true'
 ANNOTATION_PREFIX = 'autoscaling.fission.io'
 INT32_MAX = 2**31 - 1
+_TERMINAL_POD_PHASES = frozenset({'Succeeded', 'Failed'})
+_FUNCTION_UID_LABEL = 'functionUid'
 
 
 class KubernetesGateway(Protocol):
@@ -53,6 +56,7 @@ class ControllerConfig:
     managed_label: str = MANAGED_LABEL
     managed_value: str = MANAGED_VALUE
     include_tainted_nodes: bool = False
+    runtime_priority_class: str | None = None
 
     def __post_init__(self) -> None:
         if self.fetcher_request.cpu_millicores < 0:
@@ -61,6 +65,8 @@ class ControllerConfig:
             raise ValueError('fetcher memory request cannot be negative')
         if not self.managed_label or not self.managed_value:
             raise ValueError('managed label and value cannot be empty')
+        if self.runtime_priority_class is not None and not self.runtime_priority_class:
+            raise ValueError('runtime priority class cannot be empty')
 
 
 @dataclass(frozen=True)
@@ -73,6 +79,12 @@ class _FunctionIdentity:
     @property
     def display_name(self) -> str:
         return f'{self.namespace}/{self.name}'
+
+
+@dataclass(frozen=True)
+class _FunctionPod:
+    display_name: str
+    priority_class: str | None
 
 
 def _object(value: object, context: str) -> JsonObject:
@@ -129,6 +141,46 @@ def _execution(function: object) -> JsonObject:
     )
 
 
+def _index_function_pods(pods: list[object]) -> dict[str, tuple[_FunctionPod, ...]]:
+    indexed: defaultdict[str, list[_FunctionPod]] = defaultdict(list)
+    for pod in pods:
+        pod_object = _object(pod, 'pod')
+        status = _object(pod_object.get('status', {}), 'pod.status')
+        phase = status.get('phase')
+        if phase in _TERMINAL_POD_PHASES:
+            continue
+        if phase is not None and not isinstance(phase, str):
+            raise CapacityError('pod.status.phase must be a string')
+
+        metadata = _object(pod_object.get('metadata', {}), 'pod.metadata')
+        labels_value = metadata.get('labels')
+        if labels_value is None:
+            continue
+        labels = _object(labels_value, 'pod.metadata.labels')
+        uid = labels.get(_FUNCTION_UID_LABEL)
+        if uid is None:
+            continue
+        if not isinstance(uid, str) or not uid:
+            raise CapacityError('pod functionUid label must be a non-empty string')
+
+        name = _string(metadata.get('name'), 'pod name')
+        namespace_value = metadata.get('namespace')
+        if namespace_value is None:
+            display_name = name
+        else:
+            namespace = _string(namespace_value, 'pod namespace')
+            display_name = f'{namespace}/{name}'
+
+        spec = _object(pod_object.get('spec'), 'pod.spec')
+        priority_class = spec.get('priorityClassName')
+        if priority_class is not None and (
+            not isinstance(priority_class, str) or not priority_class
+        ):
+            raise CapacityError('pod.spec.priorityClassName must be a non-empty string')
+        indexed[uid].append(_FunctionPod(display_name, priority_class))
+    return {uid: tuple(items) for uid, items in indexed.items()}
+
+
 class Controller:
     """Reconcile opt-in Fission Functions against current free capacity."""
 
@@ -148,9 +200,13 @@ class Controller:
             f'{self._config.managed_label}={self._config.managed_value}',
         )
         environments = index_environments(self._gateway.list_environments())
+        pods = self._gateway.list_pods()
+        function_pods = (
+            _index_function_pods(pods) if self._config.runtime_priority_class is not None else {}
+        )
         snapshot = ClusterSnapshot.build(
             self._gateway.list_nodes(),
-            self._gateway.list_pods(),
+            pods,
             include_tainted=self._config.include_tainted_nodes,
         )
 
@@ -162,15 +218,22 @@ class Controller:
                 if not _is_managed(function, self._config):
                     continue
                 managed += 1
-                if self._reconcile_function(function, environments, snapshot):
+                if self._reconcile_function(
+                    function,
+                    environments,
+                    snapshot,
+                    function_pods,
+                ):
                     updated += 1
             except Exception as error:  # Each malformed CR must be isolated.
                 display_name = self._safe_display_name(function)
                 failures.append(display_name)
+                details = str(error)
                 self._logger.exception(
-                    'failed to reconcile %s: %s',
+                    'failed to reconcile %s: %s: %s',
                     display_name,
                     type(error).__name__,
+                    details,
                 )
 
         result = ReconcileResult(managed, updated, snapshot.ready_nodes)
@@ -189,6 +252,7 @@ class Controller:
         function: object,
         environments: Mapping[tuple[str, str], JsonObject],
         snapshot: ClusterSnapshot,
+        function_pods: Mapping[str, tuple[_FunctionPod, ...]],
     ) -> bool:
         metadata = _metadata(function)
         identity = _identity(metadata)
@@ -202,6 +266,8 @@ class Controller:
             raise CapacityError(
                 f'{identity.display_name} uses unsupported executor {executor_type!r}',
             )
+
+        self._validate_runtime_priority_class(identity, function_pods)
 
         minimum = _integer(execution.get('MinScale'), 'MinScale', default=0)
         if minimum < 0 or minimum > INT32_MAX:
@@ -259,6 +325,25 @@ class Controller:
             request.memory_bytes,
         )
         return True
+
+    def _validate_runtime_priority_class(
+        self,
+        identity: _FunctionIdentity,
+        function_pods: Mapping[str, tuple[_FunctionPod, ...]],
+    ) -> None:
+        expected = self._config.runtime_priority_class
+        if expected is None:
+            return
+        for pod in function_pods.get(identity.uid, ()):
+            if pod.priority_class == expected:
+                continue
+            actual = pod.priority_class or '<none>'
+            raise CapacityError(
+                f'{identity.display_name} has Function Pod {pod.display_name} with '
+                f'priorityClassName {actual!r}; expected {expected!r}. Configure Fission '
+                'runtimePodSpec.podSpec.priorityClassName, restart the Fission executor, '
+                'and recreate existing Function workloads before opting them in',
+            )
 
     @staticmethod
     def _safe_display_name(function: object) -> str:
