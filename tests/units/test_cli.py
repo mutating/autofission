@@ -8,6 +8,7 @@ import pytest
 from autofission import __version__
 from autofission.cli import _create_gateway, build_parser, main
 from autofission.errors import ConfigurationError
+from autofission.health import HealthFiles
 from tests.helpers import environment, function, node
 
 
@@ -96,7 +97,8 @@ def test_probe_does_not_construct_client(tmp_path: Path, monkeypatch: pytest.Mon
     )
     state = tmp_path / 'state'
     state.mkdir()
-    (state / 'ready').touch()
+    monkeypatch.setattr('autofission.health.time.time', lambda: 100)
+    HealthFiles(state).mark_ready()
 
     assert (
         main(
