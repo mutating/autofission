@@ -13,7 +13,9 @@ from typing import cast
 
 import pytest
 
+from autofission.capacity import pod_requests
 from autofission.controller import ANNOTATION_PREFIX
+from autofission.models import Resources
 from autofission.quantities import parse_cpu_millicores
 from tests.e2e.conftest import FissionFunction, FunctionFactory
 from tests.e2e.support import PROTECTED_LABEL, WORKER_LABEL, E2ECluster
@@ -164,13 +166,174 @@ def test_capacity_contracts_while_ordinary_work_runs_and_recovers_afterward(
     _assert_protected_unchanged(e2e_cluster, protected_before)
 
 
+def test_ordinary_service_preempts_saturated_fission_workload(
+    e2e_cluster: E2ECluster,
+    function_factory: FunctionFactory,
+    router_url: str,
+) -> None:
+    """An ordinary Pod starts by preempting already-running elastic Function Pods."""
+    worker_cpu = _largest_worker_cpu(e2e_cluster)
+    function = function_factory(
+        cpu_millicores=max(worker_cpu // 2, 500),
+        minimum=1,
+        target_cpu=20,
+        route=True,
+    )
+    baseline = _wait_for_calculated_maximum(e2e_cluster, function, below=1_000)
+    assert baseline >= 2
+    deployment = _wait_for_function_deployment(e2e_cluster, function.name)
+    hpa = _wait_for_function_hpa(e2e_cluster, deployment)
+    _wait_for_hpa_maximum(e2e_cluster, hpa, baseline)
+    protected_before = _protected_snapshot(e2e_cluster)
+
+    assert function.path is not None
+    controller_running = True
+    with _LoadGenerator(
+        f'{router_url}{function.path}',
+        concurrency=max(baseline * 3, 12),
+    ):
+        e2e_cluster.wait_for(
+            'Fission to occupy all calculated capacity',
+            lambda: baseline if _ready_replicas(e2e_cluster, deployment) == baseline else None,
+            timeout=300,
+            interval=5,
+        )
+        function_pods = _function_pods(e2e_cluster, function.name)
+        function_uids = {_pod_uid(item) for item in function_pods}
+        request = _largest_pod_request(function_pods)
+        preempted_before = _preempted_pod_uids(e2e_cluster)
+
+        try:
+            controller_running = False
+            _scale_autofission(e2e_cluster, 0)
+            _apply_competing_pod(e2e_cluster, 'autofission-e2e-preempting', request)
+            competing = e2e_cluster.wait_for(
+                'ordinary Pod to become Ready after Function preemption',
+                lambda: _ready_named_pod(e2e_cluster, 'autofission-e2e-preempting'),
+                timeout=180,
+            )
+            assert _pod_priority(competing) is None
+            victims = e2e_cluster.wait_for(
+                'a saturated Function Pod to be preempted',
+                lambda: (_preempted_pod_uids(e2e_cluster) - preempted_before) & function_uids
+                or None,
+                timeout=120,
+            )
+            assert victims
+
+            _scale_autofission(e2e_cluster, 1)
+            controller_running = True
+            contracted = e2e_cluster.wait_for(
+                'MaxScale contraction after the ordinary Pod starts',
+                lambda: (
+                    value
+                    if (value := _function_maximum(e2e_cluster, function)) < baseline
+                    else None
+                ),
+                timeout=120,
+            )
+            assert 1 <= contracted < baseline
+            _assert_protected_unchanged(e2e_cluster, protected_before)
+        finally:
+            try:
+                _delete_named_pod(e2e_cluster, 'autofission-e2e-preempting')
+            finally:
+                if not controller_running:
+                    _scale_autofission(e2e_cluster, 1)
+
+
+def test_pending_nonpreempting_service_reduces_fission_maxscale_and_starts(
+    e2e_cluster: E2ECluster,
+    function_factory: FunctionFactory,
+    router_url: str,
+) -> None:
+    """Pending ordinary demand is reserved before it has a spec.nodeName."""
+    worker_cpu = _largest_worker_cpu(e2e_cluster)
+    function = function_factory(
+        cpu_millicores=max(worker_cpu // 2, 500),
+        minimum=1,
+        target_cpu=20,
+        route=True,
+    )
+    baseline = _wait_for_calculated_maximum(e2e_cluster, function, below=1_000)
+    assert baseline >= 2
+    deployment = _wait_for_function_deployment(e2e_cluster, function.name)
+    hpa = _wait_for_function_hpa(e2e_cluster, deployment)
+    _wait_for_hpa_maximum(e2e_cluster, hpa, baseline)
+    _shorten_hpa_scale_down(e2e_cluster, hpa)
+    protected_before = _protected_snapshot(e2e_cluster)
+
+    assert function.path is not None
+    with _LoadGenerator(
+        f'{router_url}{function.path}',
+        concurrency=max(baseline * 3, 12),
+    ):
+        e2e_cluster.wait_for(
+            'Fission to occupy all calculated capacity',
+            lambda: baseline if _ready_replicas(e2e_cluster, deployment) == baseline else None,
+            timeout=300,
+            interval=5,
+        )
+        request = _largest_pod_request(_function_pods(e2e_cluster, function.name))
+        preempted_before = _preempted_pod_uids(e2e_cluster)
+        _apply_competing_pod(
+            e2e_cluster,
+            'autofission-e2e-pending-reservation',
+            request,
+            priority_class='autofission-controller',
+        )
+        try:
+            pending = e2e_cluster.wait_for(
+                'non-preempting ordinary Pod to wait without spec.nodeName',
+                lambda: _pending_named_pod(
+                    e2e_cluster,
+                    'autofission-e2e-pending-reservation',
+                ),
+                timeout=120,
+                interval=0.5,
+            )
+            assert _pod_priority(pending) == 'autofission-controller'
+            assert _pod_node(pending) is None
+            assert _pod_nominated_node(pending) is None
+
+            contracted = e2e_cluster.wait_for(
+                'MaxScale contraction for the unbound ordinary Pod',
+                lambda: (
+                    value
+                    if (value := _function_maximum(e2e_cluster, function)) < baseline
+                    else None
+                ),
+                timeout=120,
+            )
+            _wait_for_hpa_maximum(e2e_cluster, hpa, contracted)
+            e2e_cluster.wait_for(
+                'non-preempting ordinary Pod to become Ready after HPA scale-down',
+                lambda: _ready_named_pod(
+                    e2e_cluster,
+                    'autofission-e2e-pending-reservation',
+                ),
+                timeout=300,
+                interval=3,
+            )
+            assert _preempted_pod_uids(e2e_cluster) == preempted_before
+            _assert_protected_unchanged(e2e_cluster, protected_before)
+        finally:
+            _delete_named_pod(e2e_cluster, 'autofission-e2e-pending-reservation')
+
+    e2e_cluster.wait_for(
+        'MaxScale recovery after pending reservation disappears',
+        lambda: baseline if _function_maximum(e2e_cluster, function) == baseline else None,
+        timeout=120,
+    )
+
+
 def test_oversized_elastic_work_stays_pending_without_preempting_services(
     e2e_cluster: E2ECluster,
     function_factory: FunctionFactory,
 ) -> None:
     """Impossible demand is bounded and non-preempting priority preserves existing Pods."""
     protected_before = _protected_snapshot(e2e_cluster)
-    preempted_before = _preempted_event_uids(e2e_cluster)
+    preempted_before = _preempted_pod_uids(e2e_cluster)
     worker_cpu = _largest_worker_cpu(e2e_cluster)
     function = function_factory(cpu_millicores=worker_cpu + 1_000, minimum=1)
 
@@ -197,7 +360,7 @@ def test_oversized_elastic_work_stays_pending_without_preempting_services(
         _wait_for_failed_scheduling(e2e_cluster, 'autofission-e2e-nonpreempting')
         _assert_priority_classes_never_preempt(e2e_cluster)
         _assert_protected_unchanged(e2e_cluster, protected_before)
-        assert _preempted_event_uids(e2e_cluster) == preempted_before
+        assert _preempted_pod_uids(e2e_cluster) == preempted_before
     finally:
         e2e_cluster.kubectl(
             '-n',
@@ -362,6 +525,16 @@ def _function_pods(cluster: E2ECluster, function_name: str) -> list[Mapping[str,
     return _items(document, 'function pods')
 
 
+def _largest_pod_request(pods: list[Mapping[str, object]]) -> Resources:
+    if not pods:
+        raise AssertionError('expected at least one Function Pod')
+    largest = Resources()
+    for item in pods:
+        spec = _mapping(item.get('spec'), 'Function Pod spec')
+        largest = largest.maximum(pod_requests(spec))
+    return largest
+
+
 def _pending_function_pod(
     cluster: E2ECluster,
     function_name: str,
@@ -444,6 +617,74 @@ def _apply_reservation(cluster: E2ECluster) -> None:
     )
 
 
+def _apply_competing_pod(
+    cluster: E2ECluster,
+    name: str,
+    request: Resources,
+    *,
+    priority_class: str | None = None,
+) -> None:
+    spec: dict[str, object] = {
+        'nodeSelector': {'autofission.io/e2e-worker': 'true'},
+        'terminationGracePeriodSeconds': 0,
+        'containers': [
+            {
+                'name': 'ordinary-service',
+                'image': 'registry.k8s.io/pause:3.10',
+                'resources': {
+                    'requests': {
+                        'cpu': f'{request.cpu_millicores}m',
+                        'memory': str(request.memory_bytes),
+                    },
+                    'limits': {
+                        'cpu': f'{request.cpu_millicores}m',
+                        'memory': str(request.memory_bytes),
+                    },
+                },
+            },
+        ],
+    }
+    if priority_class is not None:
+        spec['priorityClassName'] = priority_class
+    cluster.apply(
+        {
+            'apiVersion': 'v1',
+            'kind': 'Pod',
+            'metadata': {'name': name, 'namespace': 'default'},
+            'spec': spec,
+        },
+    )
+
+
+def _delete_named_pod(cluster: E2ECluster, name: str) -> None:
+    cluster.kubectl(
+        '-n',
+        'default',
+        'delete',
+        f'pod/{name}',
+        '--ignore-not-found',
+        '--wait=true',
+    )
+
+
+def _scale_autofission(cluster: E2ECluster, replicas: int) -> None:
+    cluster.kubectl(
+        '-n',
+        'fission',
+        'scale',
+        'deployment/autofission',
+        f'--replicas={replicas}',
+    )
+    cluster.kubectl(
+        '-n',
+        'fission',
+        'rollout',
+        'status',
+        'deployment/autofission',
+        '--timeout=5m',
+    )
+
+
 def _largest_worker_cpu(cluster: E2ECluster) -> int:
     document = cluster.kubectl_json('get', 'nodes', '-l', WORKER_LABEL)
     capacities = []
@@ -485,6 +726,12 @@ def _pending_named_pod(cluster: E2ECluster, name: str) -> Mapping[str, object] |
     return pod if _pod_phase(pod) == 'Pending' else None
 
 
+def _ready_named_pod(cluster: E2ECluster, name: str) -> Mapping[str, object] | None:
+    pod = cluster.kubectl_json('-n', 'default', 'get', 'pod', name)
+    status = _mapping(pod.get('status', {}), 'Pod status')
+    return pod if status.get('phase') == 'Running' and _pod_is_ready(status) else None
+
+
 def _wait_for_failed_scheduling(cluster: E2ECluster, pod_name: str) -> None:
     def found() -> bool | None:
         document = cluster.kubectl_json(
@@ -506,7 +753,7 @@ def _assert_priority_classes_never_preempt(cluster: E2ECluster) -> None:
         assert priority.get('preemptionPolicy') == 'Never'
 
 
-def _preempted_event_uids(cluster: E2ECluster) -> set[str]:
+def _preempted_pod_uids(cluster: E2ECluster) -> set[str]:
     document = cluster.kubectl_json(
         'get',
         'events',
@@ -516,13 +763,22 @@ def _preempted_event_uids(cluster: E2ECluster) -> set[str]:
     )
     result = set()
     for event in _items(document, 'Preempted events'):
-        metadata = _mapping(event.get('metadata'), 'event.metadata')
-        result.add(_string(metadata.get('uid'), 'event.metadata.uid'))
+        involved = _mapping(event.get('involvedObject'), 'event.involvedObject')
+        result.add(_string(involved.get('uid'), 'event.involvedObject.uid'))
     return result
 
 
 def _pod_priority(pod: Mapping[str, object]) -> object:
     return _mapping(pod.get('spec'), 'pod.spec').get('priorityClassName')
+
+
+def _pod_uid(pod: Mapping[str, object]) -> str:
+    metadata = _mapping(pod.get('metadata'), 'pod.metadata')
+    return _string(metadata.get('uid'), 'pod.metadata.uid')
+
+
+def _pod_node(pod: Mapping[str, object]) -> object:
+    return _mapping(pod.get('spec'), 'pod.spec').get('nodeName')
 
 
 def _pod_phase(pod: Mapping[str, object]) -> object:

@@ -209,17 +209,84 @@ def test_snapshot_rejects_malformed_ready_nodes(mutation: object, message: str) 
         ClusterSnapshot.build([candidate], [])
 
 
-def test_snapshot_ignores_terminal_unbound_and_unknown_node_pods() -> None:
+def test_snapshot_ignores_terminal_and_unknown_node_pods() -> None:
     pods = [
         pod('succeeded', phase='Succeeded'),
         pod('failed', phase='Failed'),
-        pod('unbound', node_name=None),
-        pod('empty-node', node_name=''),
         pod('elsewhere', node_name='missing'),
     ]
     snapshot = ClusterSnapshot.build([node(cpu='1', memory='1Gi', pods='2')], pods)
 
     assert snapshot.function_capacity('new', Resources(500, 512 * 2**20)) == 2
+
+
+def test_snapshot_reserves_unbound_ordinary_pods_after_reclaiming_function_pods() -> None:
+    pods = [
+        pod('own-a', cpu='500m', memory='512Mi', function_uid='mine'),
+        pod('own-b', cpu='500m', memory='512Mi', function_uid='mine'),
+        pod('waiting-a', node_name=None, cpu='500m', memory='512Mi', phase='Pending'),
+        pod('waiting-b', node_name='', cpu='500m', memory='512Mi', phase='Pending'),
+    ]
+    snapshot = ClusterSnapshot.build(
+        [node(cpu='2', memory='2Gi', pods='4')],
+        pods,
+    )
+
+    assert snapshot.function_capacity('mine', Resources(500, 512 * 2**20)) == 2
+
+
+def test_snapshot_does_not_reserve_unbound_function_pods() -> None:
+    waiting = pod(
+        'waiting-function',
+        node_name=None,
+        cpu='1',
+        memory='1Gi',
+        phase='Pending',
+        function_uid='other',
+    )
+    snapshot = ClusterSnapshot.build(
+        [node(cpu='2', memory='2Gi', pods='4')],
+        [waiting],
+    )
+
+    assert snapshot.observed_request('other') == Resources(1_000, 2**30)
+    assert snapshot.function_capacity('mine', Resources(500, 512 * 2**20)) == 4
+
+
+def test_snapshot_uses_nominated_node_for_unbound_pod_reservation() -> None:
+    waiting = pod(
+        'waiting',
+        node_name=None,
+        cpu='1',
+        memory='1Gi',
+        phase='Pending',
+    )
+    waiting['status']['nominatedNodeName'] = 'node-b'  # type: ignore[index]
+    snapshot = ClusterSnapshot.build(
+        [
+            node('node-a', cpu='2', memory='2Gi', pods='4'),
+            node('node-b', cpu='2', memory='2Gi', pods='4'),
+        ],
+        [waiting],
+    )
+
+    assert snapshot.function_capacity('mine', Resources(1_000, 2**30)) == 3
+
+
+def test_snapshot_ignores_unbound_pod_that_cannot_fit_after_reclaiming_functions() -> None:
+    waiting = pod(
+        'impossible',
+        node_name=None,
+        cpu='3',
+        memory='1Gi',
+        phase='Pending',
+    )
+    snapshot = ClusterSnapshot.build(
+        [node(cpu='2', memory='2Gi', pods='4')],
+        [waiting],
+    )
+
+    assert snapshot.function_capacity('mine', Resources(500, 512 * 2**20)) == 4
 
 
 def test_snapshot_subtracts_other_pods_but_reclaims_own_function_pods() -> None:
@@ -298,6 +365,14 @@ def test_snapshot_rejects_invalid_function_inputs(
         (
             lambda item: item['spec'].update(nodeName=1),
             'pod.spec.nodeName must be a string',
+        ),
+        (
+            lambda item: item['status'].update(nominatedNodeName=1),
+            'pod.status.nominatedNodeName must be a string',
+        ),
+        (
+            lambda item: item['metadata'].update(namespace=''),
+            'pod.metadata.namespace must be a non-empty string',
         ),
         (
             lambda item: item['metadata'].update(labels=[]),

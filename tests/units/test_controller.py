@@ -153,6 +153,24 @@ def test_reconcile_observes_larger_real_function_pod_request() -> None:
     assert maximum == 4
 
 
+def test_reconcile_reserves_capacity_for_unbound_ordinary_pod() -> None:
+    waiting = pod(
+        name='waiting-service',
+        node_name=None,
+        cpu='1',
+        memory='1Gi',
+        phase='Pending',
+    )
+    gateway = FakeGateway(pods=[waiting])
+
+    Controller(gateway).reconcile()
+
+    maximum = gateway.patches[0][2]['spec']['InvokeStrategy']['ExecutionStrategy'][  # type: ignore[index]
+        'MaxScale'
+    ]
+    assert maximum == 11
+
+
 def test_reconcile_validates_existing_function_pod_priority_class(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
