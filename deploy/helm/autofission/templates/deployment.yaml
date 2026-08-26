@@ -47,6 +47,7 @@ spec:
             - --fetcher-memory-request={{ .Values.controller.fetcherMemoryRequest }}
             - --managed-label={{ .Values.controller.managedLabel }}
             - --managed-value={{ .Values.controller.managedValue }}
+            - --runtime-priority-class={{ include "autofission.runtimePriorityClassName" . }}
             - --log-level={{ .Values.controller.logLevel }}
             - --state-directory=/var/run/autofission
             {{- if .Values.controller.includeTaintedNodes }}
@@ -98,4 +99,3 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-

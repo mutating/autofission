@@ -127,6 +127,20 @@ def test_both_priority_classes_are_non_preempting_and_runtime_survives_uninstall
     assert 'helm.sh/resource-policy: keep' in template
 
 
+def test_chart_guides_and_enforces_fission_runtime_priority_configuration() -> None:
+    deployment = (CHART / 'templates' / 'deployment.yaml').read_text(encoding='utf-8')
+    notes = (CHART / 'templates' / 'NOTES.txt').read_text(encoding='utf-8')
+    example = (ROOT / 'deploy' / 'fission-values.yaml').read_text(encoding='utf-8')
+    assert '--runtime-priority-class=' in deployment
+    assert 'runtimePodSpec:' in notes
+    assert 'priorityClassName:' in notes
+    assert '#installation' in notes
+    assert 'install-in-a-cluster' not in notes
+    assert yaml.safe_load(example)['runtimePodSpec']['podSpec']['priorityClassName'] == (
+        'autofission-runtime'
+    )
+
+
 def test_repository_artifacts_do_not_embed_ipv4_addresses() -> None:
     ipv4 = re.compile(r'(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])')
     paths = [

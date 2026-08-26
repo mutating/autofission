@@ -8,6 +8,7 @@ import pytest
 from autofission import __version__
 from autofission.cli import _create_gateway, build_parser, main
 from autofission.errors import ConfigurationError
+from autofission.health import HealthFiles
 from tests.helpers import environment, function, node
 
 
@@ -96,7 +97,8 @@ def test_probe_does_not_construct_client(tmp_path: Path, monkeypatch: pytest.Mon
     )
     state = tmp_path / 'state'
     state.mkdir()
-    (state / 'ready').touch()
+    monkeypatch.setattr('autofission.health.time.time', lambda: 100)
+    HealthFiles(state).mark_ready()
 
     assert (
         main(
@@ -167,6 +169,14 @@ def test_cli_arguments_override_environment_and_empty_environment_uses_default(
     assert arguments.interval_seconds == 7
     assert arguments.fetcher_cpu_request == '10m'
     assert arguments.fetcher_memory_request == '32Mi'
+
+
+def test_runtime_priority_class_can_be_set_by_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv('AUTOFISSION_RUNTIME_PRIORITY_CLASS', 'elastic-runtime')
+
+    assert build_parser().parse_args([]).runtime_priority_class == 'elastic-runtime'
 
 
 def test_boolean_environment_and_cli_negation(monkeypatch: pytest.MonkeyPatch) -> None:

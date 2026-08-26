@@ -1,11 +1,21 @@
 Autofission is installed in {{ .Release.Namespace }}.
 
-Opt a newdeploy Function in:
+Before opting in a Function, configure Fission to assign the low-priority runtime
+class created by this chart. Add this block to the Helm values used for Fission:
+
+  runtimePodSpec:
+    enabled: true
+    podSpec:
+      priorityClassName: {{ include "autofission.runtimePriorityClassName" . }}
+
+Apply those values with the same helm upgrade command you use to manage Fission,
+then restart its executor:
+
+  kubectl rollout restart deployment/executor --namespace <fission-namespace>
+
+Now opt a newdeploy Function in:
+
   kubectl label function -n <namespace> <name> \
     {{ .Values.controller.managedLabel }}={{ .Values.controller.managedValue }}
 
-Protect existing workloads by configuring Fission runtime Pods to use:
-  {{ include "autofission.runtimePriorityClassName" . }}
-
-See README.md#install-in-a-cluster for the required Fission Helm values.
-
+See https://github.com/pomponchik/autofission#installation for details.

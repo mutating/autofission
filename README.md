@@ -17,18 +17,17 @@
 
 ![Autofission](https://raw.githubusercontent.com/pomponchik/autofission/develop/docs/assets/logo.svg)
 
+Autofission turns a Kubernetes cluster's spare capacity into a dynamic scaling budget for Fission Functions. It estimates available CPU, memory, and Pod slots from Kubernetes scheduling data and independently updates the maximum replica limit (`MaxScale`) for each explicitly opted-in Function.
 
-Imagine a Kubernetes cluster that runs a set of services but still has unused capacity. Rather than leaving those resources idle, you could fill them with useful, elastic work that continuously adapts to whatever CPU, memory, and Pod capacity remains available.
+Imagine a Kubernetes cluster that runs a set of services but still has capacity not reserved by existing Pods' resource requests. Rather than leaving those resources idle, you could fill them with useful, elastic work that continuously adapts to the CPU, memory, and Pod slots that remain available.
 
 That opportunistic workload must also yield when the cluster is needed for something else. If you deploy another service, the elastic work should make room for it instead of turning spare-capacity use into permanent resource contention.
 
 Independent, disposable units of work are a good fit for this role: they can be packaged as AWS Lambda-like functions, and the workload can grow or shrink by changing how many function instances run at once. Managing those functions on Kubernetes requires a framework that deploys them, starts them on demand, and scales them. [Fission](https://fission.io/) provides that foundation.
 
-Fission is excellent at deploying and scaling functions, but it is not designed to treat unused cluster capacity as a dynamic resource budget. Instead, it expects an operator to decide in advance how far each Function may scale; it does not derive that ceiling from the cluster's currently unused capacity. Set the ceiling too low and useful capacity remains idle; set it too high and Fission can ask the cluster to run more functions than it has room for.
+Fission is excellent at deploying and scaling functions, but it is not designed to treat unused cluster capacity as a dynamic resource budget. Instead, it expects an operator to decide in advance how far each Fission Function may scale; it does not derive that ceiling from the cluster's currently unused capacity. Set the ceiling too low and useful capacity remains idle; set it too high and Fission can ask the cluster to run more Function instances than it has room for.
 
 That approach works when the capacity available to Fission is roughly constant. A shared cluster is rarely that static: services appear and disappear, new nodes join, and old nodes leave. An operator must therefore either dedicate a fixed amount of capacity to Fission and size every Function for that budget, or continually recalculate the Functions' limits as the rest of the cluster changes.
-
-Autofission automates the second approach. It continuously estimates how much capacity remains available in the cluster and updates the scaling limit of each explicitly opted-in Function. This keeps Fission aligned with the cluster's changing spare resources without requiring manual retuning.
 
 Autofission is designed for elastic, bare-metal, homelab, and edge clusters, where nodes come and go and idle compute should remain available to Functions without allowing them to preempt existing services.
 
@@ -47,14 +46,14 @@ Autofission is designed for elastic, bare-metal, homelab, and edge clusters, whe
 
 ## Installation
 
-Autofission is a single Python application exposed through the `autofission` CLI. It can run one reconciliation cycle and exit, or remain running and repeat the cycle at a configured interval.
+Autofission is a Python controller with an `autofission` CLI. It can calculate and apply scaling limits once and exit, or remain running and repeat the update at a configured interval.
 
 Autofission can be installed in two ways:
 
 - As a Python package for local or one-shot runs.
 - As a Helm chart for continuous operation inside the cluster.
 
-Both modes require an [existing Fission installation](https://fission.io/docs/installation/) and access to the target Kubernetes cluster.
+Both modes require an [existing Fission installation](https://fission.io/docs/installation/) and access to the target Kubernetes cluster; only `newdeploy` Functions are supported.
 
 For the Python package option, run:
 
@@ -67,16 +66,21 @@ For the Helm chart option, use the OCI release below. This requires permission t
 ```bash
 helm upgrade --install autofission \
   oci://ghcr.io/pomponchik/charts/autofission \
-  --version VERSION \
   --namespace fission \
   --create-namespace \
   --atomic \
   --wait
 ```
 
-Replace `VERSION` with a published Autofission version. The Python package and Helm chart use the same version number.
+> ⓘ For reproducible deployments, add `--version VERSION`, replacing `VERSION` with the Autofission release number published on [PyPI](https://pypi.org/project/autofission/). The Python package and Helm chart use the same version number.
 
-Function Pods managed by Autofission must use a low, non-preempting PriorityClass. The Helm chart creates `autofission-runtime`; configure Fission to apply it to runtime Pods:
+If you installed the chart, configure Fission to assign Function Pods the low-priority `autofission-runtime` class before opting in. The chart creates this class, but Fission must be told to use it.
+
+Managed Functions are background workloads: they should use only space that regular services do not need and yield it when needed.
+
+A PriorityClass tells Kubernetes which Pods are more important. With `autofission-runtime`, Function Pods cannot displace other workloads, while higher-priority Pods can displace them.
+
+Fission, not Autofission, creates these Pods. Add the following block to the Helm values you already use for Fission:
 
 ```yaml
 runtimePodSpec:
@@ -85,12 +89,14 @@ runtimePodSpec:
     priorityClassName: autofission-runtime
 ```
 
-CLI-only installations must provide an equivalent PriorityClass separately. See [Operations](#operations) for existing Fission workloads, [Configuration](#configuration) for credentials and resource-request settings, and [RBAC and security](#rbac-and-security) for required permissions.
+Then upgrade Fission with those values, using the same `helm upgrade` command you normally use to manage it. Instead of copying the block manually, you can pass the ready-made [values file](deploy/fission-values.yaml) alongside your other Fission values files.
+
+If you use the Python package without the chart, provide an equivalent low-priority, non-preempting class and configure Fission to use it; Autofission does neither. Pass its name with `--runtime-priority-class` to check existing Function Pods. See [Operations](#operations) for existing Fission workloads, [Configuration](#configuration) for credentials and resource-request settings, and [RBAC and security](#rbac-and-security) for required permissions.
 
 
 ## Quick start
 
-Before opting in, ensure that the Function resolves to positive CPU and memory requests after inheritance from its Environment; otherwise, Autofission rejects that Function.
+Before opting in, ensure that the Function's final CPU and memory requests are greater than zero after its overrides are applied to Environment defaults; otherwise, Autofission rejects it.
 
 Replace `hello` and `default` below with the name and namespace of the Function you want to manage, then apply the label to opt it in:
 
@@ -100,9 +106,9 @@ kubectl label function hello \
   autoscaling.fission.io/cluster-capacity=true
 ```
 
-This example assumes Fission's default same-namespace workload placement. If Fission sets a separate `functionNamespace`, keep the Function namespace for the Function commands and use the workload namespace for the HPA command.
+The commands in this section assume that Fission creates workload Pods in the Function's namespace. With a separate `functionNamespace`, use the Function namespace for `kubectl label` and `kubectl get function`, and the workload namespace only for `kubectl get hpa`.
 
-For a one-shot CLI run, apply the label and then run `autofission --once`, adding `--context` or another credential-selection option when needed. For a Helm installation, wait for the controller's next successful update cycle. Then inspect the Function's `MaxScale`, the recorded calculation, and the HPA. A Helm-installed controller waits 15 seconds between cycles by default; processing and transient failures can add delay:
+With the Python package, run `autofission --once` after applying the label; add `--context` or another credential-selection option when needed. With the chart, wait for the controller's next successful cycle. It waits 15 seconds between cycles by default, although processing and transient failures can add delay. Then inspect the Function's maximum replica limit (`MaxScale`), the recorded calculation, and the HPA:
 
 ```bash
 kubectl get function hello --namespace default \
@@ -119,7 +125,7 @@ Removing the label stops future management. Autofission deliberately does not gu
 
 ## How it works
 
-Autofission manages only Functions that use Fission's [`newdeploy` executor](https://fission.io/docs/usage/function/executor/). Each such Function has a fixed maximum replica count, `MaxScale`, which Fission uses as the upper bound of that Function's [Horizontal Pod Autoscaler (HPA)](https://kubernetes.io/docs/concepts/workloads/autoscaling/). Autofission changes only `MaxScale`, along with informational annotations. It does not scale replicas itself: Fission's executor, HPA, and idle reaper still decide when each Function grows and shrinks.
+Each managed Function uses Fission's [`newdeploy` executor](https://fission.io/docs/usage/function/executor/) and has a fixed maximum replica count, `MaxScale`, which Fission uses as the upper bound of that Function's [Horizontal Pod Autoscaler (HPA)](https://kubernetes.io/docs/concepts/workloads/autoscaling/). Autofission changes only `MaxScale`, along with informational annotations. It does not scale replicas itself: Fission's executor, HPA, and idle reaper still decide when each Function grows and shrinks.
 
 ```mermaid
 flowchart TD
@@ -133,12 +139,12 @@ flowchart TD
 Given the same controller settings and Function, Environment, Node, and Pod data, each cycle produces the same result without unnecessary patches:
 
 1. List opted-in Functions, along with Fission Environments, Kubernetes Nodes, and Pods.
-2. Keep schedulable `Ready` nodes and subtract the CPU, memory, and Pod slots requested by their existing workloads. Pod requests follow Kubernetes scheduling semantics, including init containers, restartable sidecars, Pod-level requests, and Pod overhead.
+2. Keep schedulable `Ready` nodes and record the CPU, memory, and Pod slots used by scheduled workloads. When placing active, unbound non-Function Pods, the model first treats capacity occupied by Function Pods as reclaimable, then uses `status.nominatedNodeName` when present or deterministic best-fit placement otherwise. Pod requests follow Kubernetes scheduling semantics, including init containers, restartable sidecars, Pod-level requests, and Pod overhead.
 3. Resolve the resources required by one replica of each Function from its Function, Environment, fetcher, and observed runtime Pod configuration.
-4. For each Function independently, estimate how many total replicas fit across the remaining per-node capacity, including replicas that are already running.
+4. For each Function independently, estimate its total replica capacity from the per-node space left by other workloads; its own running replicas count toward that total instead of reducing it.
 5. Update `MaxScale` to the calculated capacity, but never below `MinScale` or `1`.
 
-The controller processes each Function independently, so an invalid or conflicting Function does not block the others. However, any global or per-Function error prevents that cycle from refreshing the readiness marker. A failed cycle does not immediately invalidate the marker: the previous successful marker remains fresh until the configured maximum age expires (`60` seconds by default). The readiness probe must then fail for its configured `failureThreshold` before Kubernetes reports the Pod as `NotReady`.
+The controller processes each Function independently, so an invalid or conflicting Function does not block updates to valid Functions. Any global or per-Function error still prevents the cycle from refreshing readiness. The controller Pod remains ready while its latest successful cycle is within the configured maximum age (`60` seconds by default); afterward, Kubernetes marks it `NotReady` once the probe fails `failureThreshold` consecutive checks.
 
 
 ## Configuration
@@ -154,6 +160,7 @@ CLI flags take precedence over valid, non-empty environment variables, which tak
 | `--fetcher-memory-request` | `AUTOFISSION_FETCHER_MEMORY_REQUEST` | `controller.fetcherMemoryRequest` | `16Mi` |
 | `--managed-label` | `AUTOFISSION_MANAGED_LABEL` | `controller.managedLabel` | `autoscaling.fission.io/cluster-capacity` |
 | `--managed-value` | `AUTOFISSION_MANAGED_VALUE` | `controller.managedValue` | `true` |
+| `--runtime-priority-class` | `AUTOFISSION_RUNTIME_PRIORITY_CLASS` | `priorityClasses.runtime.name` | disabled (CLI); rendered runtime class (chart) |
 | `--include-tainted-nodes` | `AUTOFISSION_INCLUDE_TAINTED_NODES` | `controller.includeTaintedNodes` | `false` |
 | `--log-level` | `AUTOFISSION_LOG_LEVEL` | `controller.logLevel` | `INFO` |
 | `--state-directory` | `AUTOFISSION_STATE_DIRECTORY` | — | `/tmp/autofission` (CLI); `/var/run/autofission` (chart) |
@@ -175,7 +182,7 @@ The Python package does not install RBAC. Credentials selected for a CLI-only ru
 
 The chart does not grant permission to read Secrets, create or delete Functions, or mutate Pods, Nodes, Deployments, or Services. Other bindings attached to the same ServiceAccount can grant additional permissions.
 
-In normal operation, the controller lists all Nodes, Pods, and Environments and asks the API only for label-selected Functions. It patches only opted-in Functions and changes only `MaxScale` and its calculation annotations. Kubernetes RBAC cannot enforce these restrictions: the ClusterRole authorizes listing every Function and patching any Function field. Function, Pod, and Environment specifications can contain literal environment-variable values. Node access supplies eligibility and allocatable capacity, Pod access accounts for existing workloads, and Environment access resolves inherited requests.
+In normal operation, the controller lists all Nodes, Pods, and Environments and asks the API only for label-selected Functions. It patches only opted-in Functions and changes only `MaxScale` and its calculation annotations. Kubernetes RBAC cannot enforce these restrictions: the ClusterRole authorizes listing every Function and patching any Function field. Listing Function, Pod, and Environment specifications can expose literal environment-variable values. Node access supplies eligibility and allocatable capacity, Pod access accounts for existing workloads, and Environment access resolves inherited requests.
 
 By default, the container runs as UID/GID `65532` with a read-only root filesystem. It drops all Linux capabilities, blocks privilege escalation, and uses a `RuntimeDefault` seccomp profile. The chart creates a NetworkPolicy with an empty ingress list; it does not restrict egress. Enforcement requires a compatible network plugin, and other NetworkPolicies can add allowed ingress because Kubernetes combines their rules.
 
@@ -186,11 +193,13 @@ Treat permission to set the opt-in label as permission to consume the cluster's 
 
 ## Operations
 
-The chart runs one replica with a `Recreate` strategy, preventing overlap during Deployment-managed rollouts. This rollout behavior does not guarantee a single active controller at all times because Autofission has no leader election. After a node or cluster restart, the Deployment restores its controller replica and Autofission rebuilds its state from the API.
+The chart runs one replica with a `Recreate` strategy, avoiding overlap in Deployment-managed rollouts. This is not a distributed lock: without leader election, Autofission cannot guarantee a single active controller under every failure scenario. After a node or cluster restart, the Deployment restores its controller replica and Autofission rebuilds its state from the API.
 
 Function patches include a `resourceVersion` precondition. If a Function changes after Autofission reads it, the patch fails with a conflict instead of overwriting the concurrent change; the daemon retries the Function during its next cycle.
 
-Fission's `runtimePodSpec` setting is global: Fission merges its supported fields, including defaults supplied by its chart, into both `poolmgr` and `newdeploy` runtime Pods. After enabling or changing it, restart the Fission executor so it reads the new setting. Fission may not update existing `newdeploy` Deployment templates, so verify that each Function Deployment managed by Autofission uses the configured runtime PriorityClass before opting in that Function.
+Fission's `runtimePodSpec` setting is global: Fission merges its supported fields, including defaults supplied by its chart, into both `poolmgr` and `newdeploy` runtime Pods. After enabling or changing it, restart the Fission executor so it reads the new setting. Fission may not update existing `newdeploy` Deployment templates, so recreate or update them before opting in those Functions.
+
+The Helm-installed controller checks every existing, non-terminal Pod belonging to a managed Function and rejects that Function if its `priorityClassName` does not match the class created by the chart. The error explains how to correct Fission. A Function without any existing Pods cannot be checked this way; configure `runtimePodSpec` before opting it in so its first cold-start Pod receives the class. CLI-only runs can enable the same check with `--runtime-priority-class NAME`.
 
 Useful checks for the default release name, namespace, and ServiceAccount:
 
@@ -228,13 +237,14 @@ Apply any required controller overrides described under [Configuration](#configu
 
 ## Compatibility and limitations
 
-- Only Fission `newdeploy` Functions are managed. `poolmgr`, empty executor, and `container` are rejected as opt-in configuration errors.
+- Only Fission `newdeploy` Functions are managed. `poolmgr`, an empty executor value, and `container` are rejected as opt-in configuration errors.
 - Autofission calculates the full capacity that each managed Function could use by itself. This preserves burst capacity, but simultaneous cold bursts can leave Pods `Pending`. Later cycles account for Pods from other Functions after they are scheduled and may reduce the limits; Autofission is not a fairness scheduler.
 - With at least one eligible node, modeled capacity below one replica produces `MaxScale=1` because Fission and Kubernetes require a positive HPA maximum. An explicit `MinScale` is also honored even when it exceeds currently free capacity. With no eligible nodes, reconciliation fails and leaves existing limits unchanged.
 - The [Fission v1 API](https://fission.io/docs/reference/crd-reference/) is tested end to end with Fission `1.27.0` on Kubernetes `1.34`; the Fission `1.27.0` chart requires Kubernetes `1.32` or newer. Other version combinations are untested. Environment resource inheritance follows Fission's override semantics and is covered by unit tests.
-- Capacity includes CPU, memory, and Pod slots. It does not model storage, GPUs and other extended resources, quotas, topology or affinity, per-Function scheduling constraints, image architecture, in-place resize status, or unscheduled third-party Pods.
+- Capacity includes CPU, memory, and Pod slots. It does not model storage, GPUs and other extended resources, quotas, topology or affinity, per-Function scheduling constraints, image architecture, or in-place resize status.
+- Pending ordinary Pods reserve modeled capacity only when their requests can be virtually placed on an eligible node after reclaiming Function Pods. The fallback placement does not model node selectors, tolerations, affinity, topology, storage, or scheduler plugins; a scheduler-nominated node is used when available. Pending Fission Function Pods are not reserved, preventing Function demand from reducing its own capacity budget.
 - Nodes with `NoSchedule` or `NoExecute` taints are excluded unless the `--include-tainted-nodes` CLI flag or `controller.includeTaintedNodes` Helm value is explicitly set. Only enable the option when Fission runtime Pods actually tolerate those taints.
-- Larger requests caused by extra sidecars, Pod overhead, or runtime `Container`/`PodSpec` overrides are learned only from non-terminal Function Pods scheduled to eligible nodes. Until such a Pod exists, the Function/Environment-plus-fetcher estimate is used.
+- Larger requests caused by extra sidecars, Pod overhead, or runtime `Container`/`PodSpec` overrides are learned only from non-terminal Function Pods that are unbound or scheduled to eligible nodes. Until such a Pod exists, the Function/Environment-plus-fetcher estimate is used.
 - When Fission is configured to use the low, non-preempting runtime PriorityClass shown under Installation, Function Pods cannot preempt existing workloads. This does not prevent node-pressure eviction when requests are inaccurate or nodes run at their physical limit; reserve headroom and set accurate requests.
 - Very large clusters should benchmark API-server load and controller memory before shortening the default interval.
 - Prefer one Autofission installation per cluster. To run multiple installations, first configure `managedLabel` and `managedValue` so the controllers select disjoint sets of Functions; two controllers must never manage the same Function. Also ensure that each release renders distinct names for its chart-created cluster-scoped resources. With the default chart settings, cluster-scoped RBAC objects and PriorityClasses use rendered full names, so identical names collide even across namespaces. Any custom cluster-scoped objects created by separate installations must also have distinct names.
@@ -243,7 +253,7 @@ Apply any required controller overrides described under [Configuration](#configu
 
 ## Troubleshooting
 
-`Autofission is NotReady` — inspect controller logs. A `403` usually indicates missing custom RBAC or a ServiceAccount mismatch. A `409` means the Function changed after it was listed; the daemon retries it on the next cycle, while a `--once` run must be repeated. Other errors name the Function where possible.
+`Autofission is NotReady` — for the default Helm release, run `kubectl logs deployment/autofission --namespace fission`; adjust the release name and namespace if needed. A `403` usually indicates missing custom RBAC or a ServiceAccount mismatch. A `409` means the Function changed after it was listed; the daemon retries it on the next cycle, while a `--once` run must be repeated. Other errors name the Function where possible.
 
 `The calculated limit is smaller than expected` — check cordons, `Ready` status, taints, Pod requests, Pod slots, fetcher values, and per-node fragmentation. Capacity cannot combine spare CPU and spare memory located on different nodes.
 

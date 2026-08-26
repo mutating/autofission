@@ -7,7 +7,7 @@ build-backend = 'setuptools.build_meta'
 
 [project]
 name = 'autofission'
-version = '0.0.5'
+version = '0.0.6'
 authors = [{ name = 'pomponchik' }]
 description = 'Capacity-aware autoscaling limits for Fission on Kubernetes'
 readme = 'README.md'

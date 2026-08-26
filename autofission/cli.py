@@ -125,6 +125,11 @@ def build_parser() -> argparse.ArgumentParser:
         '--managed-value',
         default=_env('MANAGED_VALUE', MANAGED_VALUE),
     )
+    parser.add_argument(
+        '--runtime-priority-class',
+        default=_env('RUNTIME_PRIORITY_CLASS', ''),
+        help='expected PriorityClass for existing managed Function Pods',
+    )
     tainted_nodes = parser.add_mutually_exclusive_group()
     tainted_nodes.add_argument(
         '--include-tainted-nodes',
@@ -187,6 +192,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             managed_label=arguments.managed_label,
             managed_value=arguments.managed_value,
             include_tainted_nodes=arguments.include_tainted_nodes,
+            runtime_priority_class=arguments.runtime_priority_class or None,
         )
         gateway = _create_gateway(
             kubeconfig=arguments.kubeconfig,
